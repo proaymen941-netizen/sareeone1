@@ -15,7 +15,9 @@ import {
   Users,
   Bell,
   User,
-  Tag
+  Tag,
+  DollarSign,
+  Shield
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -62,6 +64,36 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       label: 'السائقين', 
       path: '/admin/drivers',
       description: 'إدارة السائقين'
+    },
+    { 
+      icon: Truck, 
+      label: 'إدارة السائقين (متقدم)', 
+      path: '/admin/drivers-advanced',
+      description: 'إحصائيات ومحفظة السائقين'
+    },
+    { 
+      icon: Store, 
+      label: 'إدارة المطاعم (متقدم)', 
+      path: '/admin/restaurants-advanced',
+      description: 'إحصائيات ومحفظة المطاعم'
+    },
+    { 
+      icon: DollarSign, 
+      label: 'التقارير المالية', 
+      path: '/admin/financial-reports',
+      description: 'مراقبة الأرباح والإيرادات'
+    },
+    { 
+      icon: Users, 
+      label: 'إدارة الموارد البشرية', 
+      path: '/admin/hr-management',
+      description: 'إدارة الموظفين والرواتب'
+    },
+    { 
+      icon: Shield, 
+      label: 'الأمن والخصوصية', 
+      path: '/admin/security',
+      description: 'إعدادات الأمان وسجلات الوصول'
     },
     { 
       icon: Percent, 
