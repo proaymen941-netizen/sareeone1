@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
-  DollarSign, TrendingUp, TrendingDown, BarChart3, 
-  PieChart, Download, Calendar, Filter, FileText,
+  DollarSign, TrendingUp, TrendingDown, 
+  Download, Calendar, Filter, FileText,
   CreditCard, Wallet, Receipt, Banknote, Shield,
   Users, Store, Truck, Target, Award, Clock,
-  RefreshCw, ChevronDown, ChevronUp, CheckCircle,
-  XCircle, AlertCircle, FileSpreadsheet, Printer,
-  Eye, EyeOff, Lock, Unlock, Bell, MessageSquare
+  RefreshCw, CheckCircle,
+  XCircle, FileSpreadsheet, Printer,
+  Eye, 
+  PieChart as PieChartIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -21,7 +22,9 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
-import { apiRequest } from '@/lib/queryClient';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 import {
   BarChart,
   Bar,
@@ -31,11 +34,8 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
   AreaChart,
   Area
 } from 'recharts';
@@ -90,6 +90,7 @@ interface WithdrawalRequest {
 }
 
 export default function AdminFinancialReports() {
+  const { toast } = useToast();
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
     to: new Date()
@@ -110,7 +111,7 @@ export default function AdminFinancialReports() {
         to: dateRange.to.toISOString(),
         type: reportType
       });
-      const response = await apiRequest('GET', `/api/admin/financial-reports?${params}`);
+      const response = await apiRequest('GET', `/api/admin/financial-reports?${params.toString()}`);
       return response.json();
     },
   });
@@ -123,638 +124,262 @@ export default function AdminFinancialReports() {
         from: dateRange.from.toISOString(),
         to: dateRange.to.toISOString()
       });
-      const response = await apiRequest('GET', `/api/admin/transactions?${params}`);
+      const response = await apiRequest('GET', `/api/admin/transactions?${params.toString()}`);
       return response.json();
-    },
+    }
   });
 
-  // جلب طلبات السحب
-  const { data: withdrawalRequests } = useQuery<WithdrawalRequest[]>({
-    queryKey: ['/api/admin/withdrawal-requests'],
+  // جلب طلبات السحب المعلقة
+  const { data: withdrawalRequestsData } = useQuery<WithdrawalRequest[]>({
+    queryKey: ['/api/admin/withdrawals/pending'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/admin/withdrawal-requests');
+      const response = await apiRequest('GET', '/api/admin/withdrawals/pending');
       return response.json();
-    },
+    }
   });
 
-  // بيانات الرسوم البيانية
+  const handleApproveWithdrawal = async (id: string) => {
+    try {
+      await apiRequest('POST', `/api/admin/withdrawals/${id}/approve`, {});
+      toast({ title: 'تمت الموافقة على طلب السحب بنجاح' });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/withdrawals/pending'] });
+    } catch (error) {
+      toast({ title: 'فشل في الموافقة على طلب السحب', variant: 'destructive' });
+    }
+  };
+
+  const handleRejectWithdrawal = async (id: string) => {
+    try {
+      await apiRequest('POST', `/api/admin/withdrawals/${id}/reject`, { reason: 'تم الرفض من قبل المسؤول' });
+      toast({ title: 'تم رفض طلب السحب' });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/withdrawals/pending'] });
+    } catch (error) {
+      toast({ title: 'فشل في رفض طلب السحب', variant: 'destructive' });
+    }
+  };
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+
   const revenueData = financialReports?.map(report => ({
     name: report.period,
     revenue: report.totalRevenue,
-    profit: report.netProfit,
-    commission: report.commissionEarned
+    profit: report.netProfit
   })) || [];
 
-  const expenseDistribution = [
-    { name: 'دفع المطاعم', value: financialReports?.[0]?.restaurantPayments || 0, color: '#0088FE' },
-    { name: 'دفع السائقين', value: financialReports?.[0]?.driverPayments || 0, color: '#00C49F' },
-    { name: 'الضرائب', value: financialReports?.[0]?.taxAmount || 0, color: '#FFBB28' },
-    { name: 'مصروفات المنصة', value: financialReports?.[0]?.platformFees || 0, color: '#FF8042' },
+  const categoryData = [
+    { name: 'مطاعم', value: 400 },
+    { name: 'متاجر', value: 300 },
+    { name: 'بقالات', value: 300 },
+    { name: 'صيدليات', value: 200 },
   ];
-
-  const transactionTypes = [
-    { type: 'العمولة', count: transactions?.filter(t => t.type === 'commission').length || 0, amount: transactions?.filter(t => t.type === 'commission').reduce((sum, t) => sum + t.amount, 0) || 0 },
-    { type: 'رسوم التوصيل', count: transactions?.filter(t => t.type === 'delivery_fee').length || 0, amount: transactions?.filter(t => t.type === 'delivery_fee').reduce((sum, t) => sum + t.amount, 0) || 0 },
-    { type: 'السحب', count: transactions?.filter(t => t.type === 'withdrawal').length || 0, amount: transactions?.filter(t => t.type === 'withdrawal').reduce((sum, t) => sum + t.amount, 0) || 0 },
-    { type: 'المكافآت', count: transactions?.filter(t => t.type === 'bonus').length || 0, amount: transactions?.filter(t => t.type === 'bonus').reduce((sum, t) => sum + t.amount, 0) || 0 },
-  ];
-
-  const handleExportReport = async (format: 'pdf' | 'excel' | 'csv') => {
-    try {
-      const params = new URLSearchParams({
-        from: dateRange.from.toISOString(),
-        to: dateRange.to.toISOString(),
-        format
-      });
-      const response = await apiRequest('GET', `/api/admin/export-financial-report?${params}`);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `financial-report-${new Date().toISOString().split('T')[0]}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('Error exporting report:', error);
-    }
-  };
-
-  const handleApproveWithdrawal = async (withdrawalId: string) => {
-    try {
-      await apiRequest('PUT', `/api/admin/withdrawal-requests/${withdrawalId}/approve`);
-      toast({ title: 'تم الموافقة على السحب', description: 'تمت الموافقة بنجاح' });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/withdrawal-requests'] });
-    } catch (error) {
-      toast({ title: 'خطأ', description: 'فشل في الموافقة', variant: 'destructive' });
-    }
-  };
-
-  const handleRejectWithdrawal = async (withdrawalId: string, reason: string) => {
-    try {
-      await apiRequest('PUT', `/api/admin/withdrawal-requests/${withdrawalId}/reject`, { reason });
-      toast({ title: 'تم رفض السحب', description: 'تم الرفض بنجاح' });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/withdrawal-requests'] });
-    } catch (error) {
-      toast({ title: 'خطأ', description: 'فشل في الرفض', variant: 'destructive' });
-    }
-  };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <DollarSign className="h-8 w-8 text-green-500" />
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">التقارير المالية</h1>
-            <p className="text-muted-foreground">تحليل شامل للأداء المالي والعمولات</p>
-          </div>
+    <div className="p-6 space-y-6 bg-gray-50/50 min-h-screen rtl">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">التقارير المالية</h1>
+          <p className="text-gray-500 mt-1">مراقبة الأرباح، الإيرادات، والعمليات المالية</p>
         </div>
-        
         <div className="flex gap-2">
-          <Select value={exportFormat} onValueChange={(val: any) => setExportFormat(val)}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="تصدير التقرير" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="excel">
-                <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="h-4 w-4" />
-                  Excel
-                </div>
-              </SelectItem>
-              <SelectItem value="pdf">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  PDF
-                </div>
-              </SelectItem>
-              <SelectItem value="csv">
-                <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="h-4 w-4" />
-                  CSV
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          
-          <Button onClick={() => handleExportReport(exportFormat)} className="gap-2">
-            <Download className="h-4 w-4" />
-            تصدير
+          <Button variant="outline" className="gap-2">
+            <Download className="w-4 h-4" />
+            تصدير التقارير
+          </Button>
+          <Button className="gap-2">
+            <Printer className="w-4 h-4" />
+            طباعة
           </Button>
         </div>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label>نوع التقرير</Label>
-              <Select value={reportType} onValueChange={setReportType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="daily">يومي</SelectItem>
-                  <SelectItem value="weekly">أسبوعي</SelectItem>
-                  <SelectItem value="monthly">شهري</SelectItem>
-                  <SelectItem value="custom">مخصص</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <Label>من تاريخ</Label>
-              <DatePicker
-                date={dateRange.from}
-                onDateChange={(date) => setDateRange(prev => ({ ...prev, from: date }))}
-              />
-            </div>
-            
-            <div>
-              <Label>إلى تاريخ</Label>
-              <DatePicker
-                date={dateRange.to}
-                onDateChange={(date) => setDateRange(prev => ({ ...prev, to: date }))}
-              />
-            </div>
-            
-            <div className="flex items-end">
-              <Button onClick={() => queryClient.invalidateQueries()} className="w-full gap-2">
-                <RefreshCw className="h-4 w-4" />
-                تحديث البيانات
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Financial Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-muted-foreground">إجمالي الإيرادات</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {financialReports?.[0]?.totalRevenue?.toLocaleString() || 0} ريال
-                </p>
-                <div className="flex items-center gap-1 mt-2">
-                  <TrendingUp className="h-4 w-4 text-green-500" />
-                  <span className="text-sm text-green-500">+12%</span>
-                  <span className="text-xs text-muted-foreground">عن الشهر الماضي</span>
-                </div>
-              </div>
-              <DollarSign className="h-8 w-8 text-green-500" />
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">إجمالي الإيرادات</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">1,234,567 ر.ي</div>
+            <p className="text-xs text-green-500 flex items-center gap-1 mt-1">
+              <TrendingUp className="w-3 h-3" />
+              +12.5% من الشهر الماضي
+            </p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-muted-foreground">صافي الربح</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {financialReports?.[0]?.netProfit?.toLocaleString() || 0} ريال
-                </p>
-                <div className="flex items-center gap-1 mt-2">
-                  <TrendingUp className="h-4 w-4 text-green-500" />
-                  <span className="text-sm text-green-500">+8%</span>
-                  <span className="text-xs text-muted-foreground">عن الشهر الماضي</span>
-                </div>
-              </div>
-              <TrendingUp className="h-8 w-8 text-blue-500" />
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">صافي الأرباح</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">245,890 ر.ي</div>
+            <p className="text-xs text-green-500 flex items-center gap-1 mt-1">
+              <TrendingUp className="w-3 h-3" />
+              +8.2% من الشهر الماضي
+            </p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-muted-foreground">العمولات المكتسبة</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {financialReports?.[0]?.commissionEarned?.toLocaleString() || 0} ريال
-                </p>
-                <div className="flex items-center gap-1 mt-2">
-                  <TrendingUp className="h-4 w-4 text-green-500" />
-                  <span className="text-sm text-green-500">+15%</span>
-                  <span className="text-xs text-muted-foreground">عن الشهر الماضي</span>
-                </div>
-              </div>
-              <CreditCard className="h-8 w-8 text-purple-500" />
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">إجمالي العمولات</CardTitle>
+            <Receipt className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">123,450 ر.ي</div>
+            <p className="text-xs text-green-500 flex items-center gap-1 mt-1">
+              <TrendingUp className="w-3 h-3" />
+              +5.4% من الشهر الماضي
+            </p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-muted-foreground">متوسط قيمة الطلب</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {financialReports?.[0]?.averageOrderValue?.toLocaleString() || 0} ريال
-                </p>
-                <div className="flex items-center gap-1 mt-2">
-                  <TrendingUp className="h-4 w-4 text-green-500" />
-                  <span className="text-sm text-green-500">+5%</span>
-                  <span className="text-xs text-muted-foreground">عن الشهر الماضي</span>
-                </div>
-              </div>
-              <Receipt className="h-8 w-8 text-orange-500" />
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">طلبات السحب المعلقة</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{withdrawalRequestsData?.length || 0}</div>
+            <p className="text-xs text-orange-500 mt-1">تحتاج إلى مراجعة</p>
           </CardContent>
         </Card>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">نظرة عامة</TabsTrigger>
-          <TabsTrigger value="transactions">المعاملات</TabsTrigger>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>الإيرادات والأرباح</CardTitle>
+            <CardDescription>مقارنة بين إجمالي الإيرادات وصافي الأرباح خلال الفترة</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={revenueData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Area type="monotone" dataKey="revenue" stackId="1" stroke="#8884d8" fill="#8884d8" name="الإيرادات" />
+                <Area type="monotone" dataKey="profit" stackId="1" stroke="#82ca9d" fill="#82ca9d" name="الأرباح" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>توزيع المبيعات حسب التصنيف</CardTitle>
+            <CardDescription>أداء التصنيفات المختلفة في النظام</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChartIcon width={400} height={300}>
+                <Pie
+                  data={categoryData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {categoryData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChartIcon>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="transactions" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="transactions">المعاملات الحديثة</TabsTrigger>
           <TabsTrigger value="withdrawals">طلبات السحب</TabsTrigger>
-          <TabsTrigger value="analytics">التحليلات</TabsTrigger>
+          <TabsTrigger value="taxes">الضرائب والرسوم</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-6">
-          {/* Revenue Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>الإيرادات والمبيعات</CardTitle>
-              <CardDescription>تطور الإيرادات خلال الفترة المحددة</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={revenueData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Area type="monotone" dataKey="revenue" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
-                    <Area type="monotone" dataKey="profit" stroke="#82ca9d" fill="#82ca9d" fillOpacity={0.3} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Expense Distribution */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>توزيع المصروفات</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={expenseDistribution}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={(entry) => `${entry.name}: ${entry.value.toLocaleString()} ريال`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {expenseDistribution.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>أداء المعاملات</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {transactionTypes.map((type, index) => (
-                    <div key={index} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="font-medium">{type.type}</span>
-                        <span className="font-bold">{type.amount.toLocaleString()} ريال</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm text-muted-foreground">
-                        <span>{type.count} معاملة</span>
-                        <span>{((type.amount / (transactionTypes.reduce((sum, t) => sum + t.amount, 0) || 1)) * 100).toFixed(1)}%</span>
-                      </div>
-                      <Progress value={(type.amount / (transactionTypes.reduce((sum, t) => sum + t.amount, 0) || 1)) * 100} className="h-2" />
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="transactions" className="space-y-6">
+        <TabsContent value="transactions">
           <Card>
             <CardHeader>
               <CardTitle>سجل المعاملات</CardTitle>
-              <CardDescription>جميع المعاملات المالية خلال الفترة</CardDescription>
+              <CardDescription>جميع العمليات المالية المسجلة في النظام</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>رقم المرجع</TableHead>
-                      <TableHead>النوع</TableHead>
-                      <TableHead>المبلغ</TableHead>
-                      <TableHead>من</TableHead>
-                      <TableHead>إلى</TableHead>
-                      <TableHead>الحالة</TableHead>
-                      <TableHead>التاريخ</TableHead>
-                      <TableHead>الإجراءات</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>المعرف</TableHead>
+                    <TableHead>النوع</TableHead>
+                    <TableHead>المبلغ</TableHead>
+                    <TableHead>التاريخ</TableHead>
+                    <TableHead>الحالة</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions?.map((tx) => (
+                    <TableRow key={tx.id}>
+                      <TableCell className="font-medium">#{tx.id.slice(0, 8)}</TableCell>
+                      <TableCell>{tx.type}</TableCell>
+                      <TableCell>{tx.amount} ر.ي</TableCell>
+                      <TableCell>{new Date(tx.createdAt).toLocaleDateString('ar-YE')}</TableCell>
+                      <TableCell>
+                        <Badge variant={tx.status === 'completed' ? 'default' : 'secondary'}>
+                          {tx.status}
+                        </Badge>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactions?.map((transaction) => (
-                      <TableRow key={transaction.id}>
-                        <TableCell className="font-medium">{transaction.reference}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {transaction.type === 'commission' ? 'عمولة' :
-                             transaction.type === 'delivery_fee' ? 'رسوم توصيل' :
-                             transaction.type === 'withdrawal' ? 'سحب' :
-                             transaction.type === 'bonus' ? 'مكافأة' : transaction.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-bold">{transaction.amount.toLocaleString()} ريال</TableCell>
-                        <TableCell>{transaction.fromUser}</TableCell>
-                        <TableCell>{transaction.toUser}</TableCell>
-                        <TableCell>
-                          <Badge variant={
-                            transaction.status === 'completed' ? 'default' :
-                            transaction.status === 'pending' ? 'secondary' :
-                            'destructive'
-                          }>
-                            {transaction.status === 'completed' ? 'مكتمل' :
-                             transaction.status === 'pending' ? 'معلق' : 'فاشل'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{new Date(transaction.createdAt).toLocaleString('ar')}</TableCell>
-                        <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedTransaction(transaction);
-                              setShowTransactionDetails(true);
-                            }}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="withdrawals" className="space-y-6">
+        <TabsContent value="withdrawals">
           <Card>
             <CardHeader>
-              <CardTitle>طلبات السحب</CardTitle>
-              <CardDescription>إدارة طلبات السحب من السائقين والمطاعم</CardDescription>
+              <CardTitle>إدارة طلبات السحب</CardTitle>
+              <CardDescription>مراجعة ومعالجة طلبات سحب الأرباح من السائقين والمطاعم</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>المستخدم</TableHead>
-                      <TableHead>النوع</TableHead>
-                      <TableHead>المبلغ</TableHead>
-                      <TableHead>طريقة السحب</TableHead>
-                      <TableHead>الحالة</TableHead>
-                      <TableHead>تاريخ الطلب</TableHead>
-                      <TableHead>الإجراءات</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>المستخدم</TableHead>
+                    <TableHead>المبلغ</TableHead>
+                    <TableHead>طريقة السحب</TableHead>
+                    <TableHead>التاريخ</TableHead>
+                    <TableHead className="text-left">إجراءات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {withdrawalRequestsData?.map((request) => (
+                    <TableRow key={request.id}>
+                      <TableCell>
+                        <div className="font-medium">{request.userName}</div>
+                        <div className="text-xs text-gray-500">{request.userType}</div>
+                      </TableCell>
+                      <TableCell>{request.amount} ر.ي</TableCell>
+                      <TableCell>{request.method}</TableCell>
+                      <TableCell>{new Date(request.requestedAt).toLocaleDateString('ar-YE')}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" onClick={() => handleApproveWithdrawal(request.id)}>موافقة</Button>
+                          <Button size="sm" variant="outline" className="text-destructive" onClick={() => handleRejectWithdrawal(request.id)}>رفض</Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {withdrawalRequests?.map((request) => (
-                      <TableRow key={request.id}>
-                        <TableCell className="font-medium">{request.userName}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {request.userType === 'driver' ? 'سائق' : 'مطعم'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-bold">{request.amount.toLocaleString()} ريال</TableCell>
-                        <TableCell>
-                          {request.method === 'bank_transfer' ? 'تحويل بنكي' :
-                           request.method === 'wallet' ? 'محفظة' : 'كاش'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={
-                            request.status === 'approved' ? 'default' :
-                            request.status === 'pending' ? 'secondary' :
-                            request.status === 'processed' ? 'outline' : 'destructive'
-                          }>
-                            {request.status === 'approved' ? 'موافق عليه' :
-                             request.status === 'pending' ? 'معلق' :
-                             request.status === 'processed' ? 'تم المعالجة' : 'مرفوض'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{new Date(request.requestedAt).toLocaleString('ar')}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            {request.status === 'pending' && (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleApproveWithdrawal(request.id)}
-                                >
-                                  <CheckCircle className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedWithdrawal(request);
-                                    setShowWithdrawalDialog(true);
-                                  }}
-                                >
-                                  <XCircle className="h-4 w-4" />
-                                </Button>
-                              </>
-                            )}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedWithdrawal(request);
-                                setShowWithdrawalDialog(true);
-                              }}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="analytics" className="space-y-6">
-          {/* Advanced Analytics Charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>مقارنة الإيرادات</CardTitle>
-                <CardDescription>مقارنة الإيرادات بين الفترات</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={revenueData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="revenue" fill="#8884d8" name="الإيرادات" />
-                      <Bar dataKey="profit" fill="#82ca9d" name="الربح" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>معدل النمو</CardTitle>
-                <CardDescription>تطور النمو المالي</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={revenueData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="revenue" stroke="#8884d8" />
-                      <Line type="monotone" dataKey="profit" stroke="#82ca9d" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-sm text-muted-foreground">معدل النمو الشهري</p>
-                <p className="text-2xl font-bold text-green-500">+{financialReports?.[0]?.growthRate || 0}%</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-sm text-muted-foreground">عدد المعاملات</p>
-                <p className="text-2xl font-bold text-blue-500">{financialReports?.[0]?.transactionCount || 0}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-sm text-muted-foreground">متوسط العمولة</p>
-                <p className="text-2xl font-bold text-purple-500">
-                  {((financialReports?.[0]?.commissionEarned || 0) / (financialReports?.[0]?.transactionCount || 1)).toFixed(2)} ريال
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-sm text-muted-foreground">الضرائب</p>
-                <p className="text-2xl font-bold text-orange-500">{financialReports?.[0]?.taxAmount?.toLocaleString() || 0} ريال</p>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
       </Tabs>
-
-      {/* Dialogs */}
-      <Dialog open={showTransactionDetails} onOpenChange={setShowTransactionDetails}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>تفاصيل المعاملة</DialogTitle>
-          </DialogHeader>
-          {selectedTransaction && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>رقم المرجع</Label>
-                  <p className="font-medium">{selectedTransaction.reference}</p>
-                </div>
-                <div>
-                  <Label>النوع</Label>
-                  <p className="font-medium">
-                    {selectedTransaction.type === 'commission' ? 'عمولة' :
-                     selectedTransaction.type === 'delivery_fee' ? 'رسوم توصيل' :
-                     selectedTransaction.type === 'withdrawal' ? 'سحب' :
-                     selectedTransaction.type === 'bonus' ? 'مكافأة' : selectedTransaction.type}
-                  </p>
-                </div>
-                <div>
-                  <Label>المبلغ</Label>
-                  <p className="font-bold text-lg">{selectedTransaction.amount.toLocaleString()} ريال</p>
-                </div>
-                <div>
-                  <Label>الحالة</Label>
-                  <Badge variant={
-                    selectedTransaction.status === 'completed' ? 'default' :
-                    selectedTransaction.status === 'pending' ? 'secondary' :
-                    'destructive'
-                  }>
-                    {selectedTransaction.status === 'completed' ? 'مكتمل' :
-                     selectedTransaction.status === 'pending' ? 'معلق' : 'فاشل'}
-                  </Badge>
-                </div>
-                <div>
-                  <Label>من</Label>
-                  <p>{selectedTransaction.fromUser}</p>
-                </div>
-                <div>
-                  <Label>إلى</Label>
-                  <p>{selectedTransaction.toUser}</p>
-                </div>
-                <div className="col-span-2">
-                  <Label>الوصف</Label>
-                  <p>{selectedTransaction.description}</p>
-                </div>
-                <div className="col-span-2">
-                  <Label>التاريخ</Label>
-                  <p>{new Date(selectedTransaction.createdAt).toLocaleString('ar')}</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

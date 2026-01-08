@@ -9,15 +9,15 @@ import AdminCategories from "./AdminCategories";
 import AdminUsers from "./AdminUsers";
 import AdminProfile from "./AdminProfile";
 import AdminUiSettings from "./admin/AdminUiSettings";
-import AdminDriverAccounts from "./AdminDriverAccounts"; // ملف جديد
-import AdminRestaurantAccounts from "./AdminRestaurantAccounts"; // ملف جديد
-import AdminFinancialReports from "./AdminFinancialReports"; // ملف جديد
-import AdminAdvancedReports from "./AdminAdvancedReports"; // ملف جديد
-import AdminHRManagement from "./AdminHRManagement"; // ملف جديد
-import AdminSecurity from "./AdminSecurity"; // ملف جديد
-import AdminPromotions from "./AdminPromotions"; // ملف جديد
-import AdminCustomerPortal from "./AdminCustomerPortal"; // ملف جديد
+import AdminFinancialReports from "./AdminFinancialReports"; 
+import AdminHRManagement from "./AdminHRManagement"; 
+import AdminSecurity from "./AdminSecurity"; 
+import AdminDriversAdvanced from "./AdminDriversAdvanced";
+import AdminRestaurantsAdvanced from "./AdminRestaurantsAdvanced";
+import RatingsManagement from "./RatingsManagement";
+import WalletManagement from "./WalletManagement";
 import NotFound from "./not-found";
+import React from "react";
 
 // Admin Overview Page Component
 const AdminOverview = () => {
@@ -115,19 +115,18 @@ export const AdminApp: React.FC<AdminAppProps> = () => {
         <Route path="/admin/restaurants" component={AdminRestaurants} />
         <Route path="/admin/menu-items" component={AdminMenuItems} />
         <Route path="/admin/drivers" component={AdminDrivers} />
-        <Route path="/admin/driver-accounts" component={AdminDriverAccounts} />
-        <Route path="/admin/restaurant-accounts" component={AdminRestaurantAccounts} />
+        <Route path="/admin/drivers-advanced" component={AdminDriversAdvanced} />
+        <Route path="/admin/restaurants-advanced" component={AdminRestaurantsAdvanced} />
         <Route path="/admin/offers" component={AdminOffers} />
         <Route path="/admin/users" component={AdminUsers} />
         <Route path="/admin/categories" component={AdminCategories} />
         <Route path="/admin/profile" component={AdminProfile} />
         <Route path="/admin/financial-reports" component={AdminFinancialReports} />
-        <Route path="/admin/advanced-reports" component={AdminAdvancedReports} />
         <Route path="/admin/hr-management" component={AdminHRManagement} />
         <Route path="/admin/security" component={AdminSecurity} />
-        <Route path="/admin/promotions" component={AdminPromotions} />
-        <Route path="/admin/customer-portal" component={AdminCustomerPortal} />
         <Route path="/admin/ui-settings" component={AdminUiSettings} />
+        <Route path="/admin/ratings" component={RatingsManagement} />
+        <Route path="/admin/wallet" component={WalletManagement} />
         <Route component={NotFound} />
       </Switch>
     </AdminLayout>
