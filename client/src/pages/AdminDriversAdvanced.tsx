@@ -1,10 +1,11 @@
 // AdminDriversAdvanced.tsx
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Truck, User, Wallet, BarChart3, Star, Clock, DollarSign, 
   MapPin, Phone, Mail, Shield, Award, AlertCircle, Download,
-  Filter, Search, Eye, Edit, Trash2, CheckCircle, XCircle
+  Filter, Search, Eye, Edit, Trash2, CheckCircle, XCircle, ArrowLeft,
+  TrendingUp, Users, Activity, Target, Zap, AlertTriangle, Info
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -62,11 +63,13 @@ interface DriverStats {
 export default function AdminDriversAdvanced() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate ? (() => window.location.href = '/admin') : () => {};
   const [activeTab, setActiveTab] = useState('all');
   const [selectedDriver, setSelectedDriver] = useState<DriverStats | null>(null);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [ratingFilter, setRatingFilter] = useState<string>('');
 
   // 🔄 جلب بيانات السائقين مع الإحصائيات
   const { data: drivers, isLoading } = useQuery<DriverStats[]>({
@@ -125,12 +128,20 @@ export default function AdminDriversAdvanced() {
     });
   };
 
-  const filteredDrivers = drivers?.filter(driver => {
-    if (statusFilter !== 'all' && driver.status !== statusFilter) return false;
-    if (searchTerm && !driver.name.toLowerCase().includes(searchTerm.toLowerCase()) && 
-        !driver.phone.includes(searchTerm)) return false;
-    return true;
-  });
+  const filteredDrivers = useMemo(() => {
+    return drivers?.filter(driver => {
+      const matchesSearch = !searchTerm || 
+        driver.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        driver.phone.includes(searchTerm);
+      
+      const matchesStatus = statusFilter === 'all' || driver.status === statusFilter;
+      
+      const matchesRating = !ratingFilter || 
+        parseFloat(driver.avgRating?.toString() || '0') >= parseFloat(ratingFilter);
+      
+      return matchesSearch && matchesStatus && matchesRating;
+    }) || [];
+  }, [drivers, searchTerm, statusFilter, ratingFilter]);
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -143,85 +154,138 @@ export default function AdminDriversAdvanced() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-4 lg:p-6">
+      {/* Header with Back Button */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Truck className="h-8 w-8 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">إدارة حسابات السائقين</h1>
-            <p className="text-muted-foreground">إدارة شاملة لبيانات وتقارير وأداء السائقين</p>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => navigate()}
+            className="gap-2 lg:absolute lg:left-6 lg:top-6"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            رجوع
+          </Button>
+          
+          <div className="ml-12 lg:ml-0">
+            <Truck className="h-8 w-8 text-primary inline mr-3" />
+            <div className="inline-block">
+              <h1 className="text-xl lg:text-2xl font-bold text-foreground">إدارة السائقين</h1>
+              <p className="text-sm lg:text-base text-muted-foreground">شاملة متقدمة للأداء والأرباح</p>
+            </div>
           </div>
         </div>
         
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => exportReport('excel')} className="gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button 
+            variant="outline" 
+            onClick={() => exportReport('excel')} 
+            className="gap-2 text-sm"
+            size="sm"
+          >
             <Download className="h-4 w-4" />
-            تصدير Excel
+            Excel
           </Button>
-          <Button variant="outline" onClick={() => exportReport('pdf')} className="gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => exportReport('pdf')} 
+            className="gap-2 text-sm"
+            size="sm"
+          >
             <Download className="h-4 w-4" />
-            تصدير PDF
+            PDF
           </Button>
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
+      {/* Quick Stats - Responsive Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+        <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">إجمالي السائقين</p>
-                <p className="text-2xl font-bold">{drivers?.length || 0}</p>
+                <p className="text-xs lg:text-sm text-muted-foreground">إجمالي السائقين</p>
+                <p className="text-xl lg:text-2xl font-bold">{drivers?.length || 0}</p>
               </div>
-              <Users className="h-8 w-8 text-blue-500" />
+              <Users className="h-6 lg:h-8 w-6 lg:w-8 text-blue-500" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">النشطين الآن</p>
-                <p className="text-2xl font-bold">
+                <p className="text-xs lg:text-sm text-muted-foreground">النشطين</p>
+                <p className="text-xl lg:text-2xl font-bold">
                   {drivers?.filter(d => d.status === 'active').length || 0}
                 </p>
               </div>
-              <CheckCircle className="h-8 w-8 text-green-500" />
+              <CheckCircle className="h-6 lg:h-8 w-6 lg:w-8 text-green-500" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">إجمالي الأرباح</p>
-                <p className="text-2xl font-bold">
-                  {drivers?.reduce((sum, d) => sum + d.totalEarnings, 0).toFixed(2)} ريال
+                <p className="text-xs lg:text-sm text-muted-foreground">إجمالي الأرباح</p>
+                <p className="text-lg lg:text-2xl font-bold">
+                  {(drivers?.reduce((sum, d) => sum + d.totalEarnings, 0) || 0).toFixed(0)} ر.ي
                 </p>
               </div>
-              <DollarSign className="h-8 w-8 text-yellow-500" />
+              <TrendingUp className="h-6 lg:h-8 w-6 lg:w-8 text-green-600" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">متوسط التقييم</p>
-                <p className="text-2xl font-bold">
-                  {(drivers?.reduce((sum, d) => sum + d.avgRating, 0) / (drivers?.length || 1)).toFixed(1)} ⭐
+                <p className="text-xs lg:text-sm text-muted-foreground">متوسط التقييم</p>
+                <p className="text-xl lg:text-2xl font-bold">
+                  {(drivers?.reduce((sum, d) => sum + (d.avgRating || 0), 0) / (drivers?.length || 1) || 0).toFixed(1)} ⭐
                 </p>
               </div>
-              <Star className="h-8 w-8 text-purple-500" />
+              <Star className="h-6 lg:h-8 w-6 lg:w-8 text-yellow-500" />
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Alerts Section */}
+      {drivers?.some((d: any) => d.warnings?.length > 0) && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-yellow-800">
+              <AlertTriangle className="h-5 w-5" />
+              تحذيرات وأولويات المراقبة
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {drivers?.filter((d: any) => d.warnings?.length > 0).map((driver: any) => (
+                <div key={driver.id} className="flex items-start gap-3 p-3 bg-white rounded border border-yellow-200">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{driver.name}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {driver.warnings?.map((w: string, i: number) => (
+                        <Badge key={i} variant="outline" className="text-xs bg-yellow-100">
+                          {w}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -236,140 +300,124 @@ export default function AdminDriversAdvanced() {
         {/* Tab 1: جميع السائقين */}
         <TabsContent value="all" className="space-y-4">
           <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle>قائمة السائقين</CardTitle>
-                <div className="flex gap-2">
-                  <div className="relative">
-                    <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="البحث عن سائق..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pr-10 w-64"
-                    />
-                  </div>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue placeholder="الحالة" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">الكل</SelectItem>
-                      <SelectItem value="active">نشط</SelectItem>
-                      <SelectItem value="inactive">غير نشط</SelectItem>
-                      <SelectItem value="suspended">موقوف</SelectItem>
-                    </SelectContent>
-                  </Select>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base lg:text-lg mb-4">قائمة السائقين</CardTitle>
+              <div className="flex flex-col lg:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="ابحث..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pr-10 text-sm"
+                  />
                 </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full lg:w-32 text-sm">
+                    <SelectValue placeholder="الحالة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">الكل</SelectItem>
+                    <SelectItem value="active">نشط</SelectItem>
+                    <SelectItem value="inactive">غير نشط</SelectItem>
+                    <SelectItem value="suspended">موقوف</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={ratingFilter} onValueChange={setRatingFilter}>
+                  <SelectTrigger className="w-full lg:w-32 text-sm">
+                    <SelectValue placeholder="التقييم" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">الكل</SelectItem>
+                    <SelectItem value="4.5">⭐ 4.5+</SelectItem>
+                    <SelectItem value="4">⭐ 4+</SelectItem>
+                    <SelectItem value="3">⭐ 3+</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>السائق</TableHead>
-                    <TableHead>التواصل</TableHead>
-                    <TableHead>الحالة</TableHead>
-                    <TableHead>التقييم</TableHead>
-                    <TableHead>الطلبات</TableHead>
-                    <TableHead>الأرباح</TableHead>
-                    <TableHead>المحفظة</TableHead>
-                    <TableHead>الإجراءات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredDrivers?.map((driver) => (
-                    <TableRow key={driver.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
-                            {driver.name.charAt(0)}
-                          </div>
-                          <div>
-                            <p className="font-medium">{driver.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(driver.joinDate).toLocaleDateString('ar-SA')}
-                            </p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <p className="text-sm flex items-center gap-1">
-                            <Phone className="h-3 w-3" />
-                            {driver.phone}
-                          </p>
-                          <p className="text-sm flex items-center gap-1">
-                            <Mail className="h-3 w-3" />
-                            {driver.email}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>{getStatusBadge(driver.status)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                          <span className="font-medium">{driver.avgRating.toFixed(1)}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <p className="text-sm">إجمالي: {driver.totalOrders}</p>
-                          <p className="text-xs text-green-600">مكتمل: {driver.completedOrders}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <p className="font-medium">{driver.totalEarnings.toFixed(2)} ريال</p>
-                        <p className="text-xs text-muted-foreground">اليوم: {driver.todayEarnings.toFixed(2)}</p>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Wallet className="h-4 w-4 text-green-500" />
-                          <span className="font-medium">{driver.walletBalance.toFixed(2)} ريال</span>
-                        </div>
-                        {driver.withdrawalRequests.filter(r => r.status === 'pending').length > 0 && (
-                          <Badge variant="outline" className="text-xs mt-1">
-                            {driver.withdrawalRequests.filter(r => r.status === 'pending').length} طلب سحب
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedDriver(driver);
-                              setShowDetailsDialog(true);
-                            }}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Select
-                            value={driver.status}
-                            onValueChange={(value) => updateDriverStatus.mutate({ 
-                              driverId: driver.id, 
-                              status: value 
-                            })}
-                          >
-                            <SelectTrigger className="w-28 h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="active">تفعيل</SelectItem>
-                              <SelectItem value="inactive">تعطيل</SelectItem>
-                              <SelectItem value="suspended">إيقاف</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </TableCell>
+              <div className="overflow-x-auto -mx-4 lg:mx-0">
+                <Table className="text-xs lg:text-sm">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-right">السائق</TableHead>
+                      <TableHead className="hidden md:table-cell">التقييم</TableHead>
+                      <TableHead className="hidden lg:table-cell">الطلبات</TableHead>
+                      <TableHead className="hidden lg:table-cell">الأرباح</TableHead>
+                      <TableHead className="text-center">الحالة</TableHead>
+                      <TableHead className="text-center">إجراءات</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredDrivers?.map((driver) => (
+                      <TableRow key={driver.id} className="hover:bg-muted/50">
+                        <TableCell className="text-right">
+                          <div className="flex items-center gap-2 justify-end">
+                            <div className="text-right">
+                              <p className="font-medium text-xs lg:text-sm">{driver.name}</p>
+                              <p className="text-xs text-muted-foreground">{driver.phone}</p>
+                            </div>
+                            <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
+                              {driver.name.charAt(0)}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <div className="flex items-center gap-1">
+                            <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                            <span className="font-medium">{(driver.avgRating || 0).toFixed(1)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <span className="text-xs">
+                            {driver.completedOrders}/{driver.totalOrders}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <span className="font-medium text-xs">
+                            {(driver.totalEarnings || 0).toFixed(0)} ر.ي
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {getStatusBadge(driver.status)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex gap-1 justify-center">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedDriver(driver);
+                                setShowDetailsDialog(true);
+                              }}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Select
+                              value={driver.status}
+                              onValueChange={(value) => updateDriverStatus.mutate({ 
+                                driverId: driver.id, 
+                                status: value 
+                              })}
+                            >
+                              <SelectTrigger className="w-20 h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="active">✓ نشط</SelectItem>
+                                <SelectItem value="inactive">✗ معطل</SelectItem>
+                                <SelectItem value="suspended">⛔ موقوف</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -478,13 +526,13 @@ export default function AdminDriversAdvanced() {
 
       {/* تفاصيل السائق Dialog */}
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-2xl lg:max-w-4xl max-h-screen overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>تفاصيل السائق</DialogTitle>
+            <DialogTitle className="text-lg lg:text-xl">تفاصيل السائق</DialogTitle>
           </DialogHeader>
           
           {selectedDriver && (
-            <div className="space-y-6">
+            <div className="space-y-4 lg:space-y-6">
               {/* معلومات أساسية */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
