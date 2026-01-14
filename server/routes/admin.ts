@@ -1,23 +1,40 @@
 import express from "express";
 import { storage } from "../storage";
+// تم حذف نظام المصادقة
+// تم حذف bcrypt - لا حاجة لتشفير كلمات المرور بعد إزالة نظام المصادقة
 import { z } from "zod";
-import { 
+import { eq, and, desc, sql, or, like, asc, inArray } from "drizzle-orm";
+import {
   insertRestaurantSchema,
   insertCategorySchema,
   insertSpecialOfferSchema,
   insertAdminUserSchema,
   insertDriverSchema,
   insertMenuItemSchema,
-  insertNotificationSchema,
-  insertSystemSettingsSchema
+  adminUsers,
+  // تم حذف adminSessions
+  categories,
+  restaurantSections,
+  restaurants,
+  menuItems,
+  users,
+  customers,
+  userAddresses,
+  orders,
+  specialOffers,
+  notifications,
+  ratings,
+  systemSettings,
+  drivers,
+  orderTracking,
+  cart,
+  favorites
 } from "@shared/schema";
-import { requireAuth, requireRole } from "../auth";
+import { DatabaseStorage } from "../db";
 
 const router = express.Router();
-
-// Apply authentication and admin role requirement to all admin routes
-router.use(requireAuth);
-router.use(requireRole(['admin']));
+const dbStorage = new DatabaseStorage();
+const db = dbStorage.db;
 
 // Helper function to coerce request data for proper Zod validation
 function coerceRequestData(data: any) {
@@ -74,14 +91,41 @@ function coerceRequestData(data: any) {
   return coerced;
 }
 
+// Schema object for direct database operations
+const schema = {
+  adminUsers,
+  // تم حذف adminSessions من schema object
+  categories,
+  restaurantSections,
+  restaurants,
+  menuItems,
+  users,
+  customers,
+  userAddresses,
+  orders,
+  specialOffers,
+  notifications,
+  ratings,
+  systemSettings,
+  drivers,
+  orderTracking,
+  cart,
+  favorites
+};
+
+// تم حذف middleware المصادقة - يمكن الوصول المباشر للبيانات بدون مصادقة
+
+// تم حذف جميع عمليات المصادقة - الوصول مباشر للبيانات بدون مصادقة
+
 // لوحة المعلومات
 router.get("/dashboard", async (req, res) => {
   try {
+    // جلب البيانات من قاعدة البيانات
     const [restaurants, orders, drivers, users] = await Promise.all([
       storage.getRestaurants(),
       storage.getOrders(),
       storage.getDrivers(),
-      storage.getUsers()
+      storage.getUsers ? storage.getUsers() : []
     ]);
 
     const today = new Date().toDateString();
@@ -674,7 +718,7 @@ router.post("/drivers", async (req, res) => {
     
     const validatedData = insertDriverSchema.parse(driverData);
     
-    const newDriver = await storage.createDriver(validatedData);
+    const newDriver = await dbStorage.createDriver(validatedData);
     res.status(201).json(newDriver);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -696,7 +740,7 @@ router.put("/drivers/:id", async (req, res) => {
     // التحقق من صحة البيانات المحدثة (جزئي)
     const validatedData = insertDriverSchema.partial().parse(req.body);
     
-    const updatedDriver = await storage.updateDriver(id, validatedData);
+    const updatedDriver = await dbStorage.updateDriver(id, validatedData);
     
     if (!updatedDriver) {
       return res.status(404).json({ error: "السائق غير موجود" });
@@ -719,7 +763,7 @@ router.delete("/drivers/:id", async (req, res) => {
   try {
     const { id } = req.params;
     
-    const success = await storage.deleteDriver(id);
+    const success = await dbStorage.deleteDriver(id);
     
     if (!success) {
       return res.status(404).json({ error: "السائق غير موجود" });
@@ -890,15 +934,16 @@ router.delete("/special-offers/:id", async (req, res) => {
 });
 
 // إدارة الإشعارات
-router.post("/notifications", async (req, res) => {
+router.post("/notifications", async (req: any, res) => {
   try {
     const notificationData = {
       ...req.body,
-      createdBy: req.user!.id
+      createdBy: req.admin.id
     };
     
-    const validatedData = insertNotificationSchema.parse(notificationData);
-    const newNotification = await storage.createNotification(validatedData);
+    const [newNotification] = await db.insert(schema.notifications)
+      .values(notificationData)
+      .returning();
     
     res.json(newNotification);
   } catch (error) {
@@ -910,7 +955,10 @@ router.post("/notifications", async (req, res) => {
 // إعدادات النظام
 router.get("/settings", async (req, res) => {
   try {
-    const settings = await storage.getUiSettings();
+    const settings = await db.select()
+      .from(schema.systemSettings)
+      .orderBy(schema.systemSettings.category, schema.systemSettings.key);
+    
     res.json(settings);
   } catch (error) {
     res.status(500).json({ error: "خطأ في الخادم" });
@@ -922,11 +970,10 @@ router.put("/settings/:key", async (req, res) => {
     const { key } = req.params;
     const { value } = req.body;
     
-    const updatedSetting = await storage.updateUiSetting(key, value);
-    
-    if (!updatedSetting) {
-      return res.status(404).json({ error: "الإعداد غير موجود" });
-    }
+    const [updatedSetting] = await db.update(schema.systemSettings)
+      .set({ value, updatedAt: new Date() })
+      .where(eq(schema.systemSettings.key, key))
+      .returning();
     
     res.json(updatedSetting);
   } catch (error) {
@@ -937,8 +984,13 @@ router.put("/settings/:key", async (req, res) => {
 // إعدادات واجهة المستخدم (متاحة للعامة)
 router.get("/ui-settings", async (req, res) => {
   try {
-    const settings = await storage.getUiSettings();
-    res.json(settings.filter(s => s.isActive));
+    const settings = await db
+      .select()
+      .from(schema.systemSettings)
+      .where(eq(schema.systemSettings.isActive, true))
+      .orderBy(schema.systemSettings.category, schema.systemSettings.key);
+    
+    res.json(settings);
   } catch (error) {
     console.error("خطأ في جلب إعدادات واجهة المستخدم:", error);
     res.status(500).json({ error: "خطأ في الخادم" });
@@ -953,15 +1005,27 @@ router.put("/business-hours", async (req, res) => {
     const updates = [];
     
     if (opening_time) {
-      updates.push(storage.updateUiSetting('opening_time', opening_time));
+      updates.push(
+        db.update(schema.systemSettings)
+          .set({ value: opening_time, updatedAt: new Date() })
+          .where(eq(schema.systemSettings.key, 'opening_time'))
+      );
     }
     
     if (closing_time) {
-      updates.push(storage.updateUiSetting('closing_time', closing_time));
+      updates.push(
+        db.update(schema.systemSettings)
+          .set({ value: closing_time, updatedAt: new Date() })
+          .where(eq(schema.systemSettings.key, 'closing_time'))
+      );
     }
     
     if (store_status) {
-      updates.push(storage.updateUiSetting('store_status', store_status));
+      updates.push(
+        db.update(schema.systemSettings)
+          .set({ value: store_status, updatedAt: new Date() })
+          .where(eq(schema.systemSettings.key, 'store_status'))
+      );
     }
     
     await Promise.all(updates);
@@ -977,21 +1041,31 @@ router.put("/business-hours", async (req, res) => {
 router.get("/users", async (req, res) => {
   try {
     // جلب العملاء
-    const customers = await storage.getAllUsers();
-    const customerList = customers.map(u => ({
-      ...u,
-      role: 'customer' as const
-    }));
+    const customers = await db.select({
+      id: schema.customers.id,
+      name: schema.customers.name,
+      email: schema.customers.email,
+      phone: schema.customers.phone,
+      role: sql<string>`'customer'`,
+      isActive: schema.customers.isActive,
+      createdAt: schema.customers.createdAt,
+      address: sql<string>`NULL`
+    }).from(schema.customers);
 
-    // جلب السائقين والمديرين
-    const adminUsers = await storage.getAllAdminUsers();
-    const adminList = adminUsers.map(a => ({
-      ...a,
-      role: a.userType as 'driver' | 'admin'
-    }));
+    // جلب السائقين والمديرين من adminUsers
+    const adminUsers = await db.select({
+      id: schema.adminUsers.id,
+      name: schema.adminUsers.name,
+      email: schema.adminUsers.email,
+      phone: schema.adminUsers.phone,
+      role: schema.adminUsers.userType,
+      isActive: schema.adminUsers.isActive,
+      createdAt: schema.adminUsers.createdAt,
+      address: sql<string>`NULL`
+    }).from(schema.adminUsers);
 
     // دمج جميع المستخدمين وترتيبهم حسب تاريخ الإنشاء
-    const allUsers = [...customerList, ...adminList]
+    const allUsers = [...customers, ...adminUsers]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     res.json(allUsers);
@@ -1006,17 +1080,28 @@ router.patch("/users/:id", async (req, res) => {
     const { id } = req.params;
     const { name, email, phone, role, isActive } = req.body;
     
-    let targetTable: 'customers' | 'adminUsers' = 'customers';
-    let currentUser: any = null;
+    // تحديد الجدول بناءً على الدور الجديد أو الحالي
+    let targetTable = 'customers';
+    let currentUser = null;
     
     // البحث عن المستخدم في جدول العملاء أولاً
-    currentUser = await storage.getUserById(id);
-    if (currentUser) {
+    const customerResult = await db.select()
+      .from(schema.customers)
+      .where(eq(schema.customers.id, id))
+      .limit(1);
+    
+    if (customerResult.length > 0) {
+      currentUser = customerResult[0];
       targetTable = 'customers';
     } else {
       // البحث في جدول المديرين والسائقين
-      currentUser = await storage.getAdminById(id);
-      if (currentUser) {
+      const adminResult = await db.select()
+        .from(schema.adminUsers)
+        .where(eq(schema.adminUsers.id, id))
+        .limit(1);
+      
+      if (adminResult.length > 0) {
+        currentUser = adminResult[0];
         targetTable = 'adminUsers';
       }
     }
@@ -1026,70 +1111,88 @@ router.patch("/users/:id", async (req, res) => {
     }
 
     // إعداد البيانات للتحديث
-    const updateData: any = {};
+    const updateData: any = {
+      updatedAt: new Date()
+    };
+    
     if (name) updateData.name = name;
     if (email) updateData.email = email;
     if (phone) updateData.phone = phone;
     if (isActive !== undefined) updateData.isActive = isActive;
     
+    // تم حذف منطق كلمة المرور
+
     let updatedUser;
     
     // التعامل مع تغيير الدور (من عميل إلى سائق/مدير أو العكس)
-    const currentRole = targetTable === 'customers' ? 'customer' : currentUser.userType;
-
-    if (role && role !== currentRole) {
+    if (role && role !== (currentUser as any).userType && role !== 'customer') {
       // إذا كان المستخدم عميل ونريد جعله سائق/مدير
       if (targetTable === 'customers' && (role === 'driver' || role === 'admin')) {
         // إنشاء مستخدم جديد في جدول adminUsers
-        const newAdminUser = await storage.createAdminUser({
+        const [newAdminUser] = await db.insert(schema.adminUsers).values({
           name: name || currentUser.name,
-          email: email || currentUser.email || `${currentUser.username}@example.com`,
-          username: currentUser.username,
+          email: email || currentUser.email,
           phone: phone || currentUser.phone,
-          password: currentUser.password || '123456', // يجب الحفاظ على كلمة المرور إذا وجدت
           userType: role,
           isActive: isActive !== undefined ? isActive : currentUser.isActive
-        });
+        }).returning();
         
         // حذف المستخدم من جدول العملاء
-        await storage.deleteUser(id);
+        await db.delete(schema.customers).where(eq(schema.customers.id, id));
         
         updatedUser = { ...newAdminUser, role: newAdminUser.userType };
       }
       // إذا كان سائق/مدير ونريد جعله عميل
       else if (targetTable === 'adminUsers' && role === 'customer') {
         // إنشاء عميل جديد
-        const newCustomer = await storage.createUser({
+        const [newCustomer] = await db.insert(schema.customers).values({
           name: name || currentUser.name,
-          username: currentUser.username || (email || currentUser.email).split('@')[0],
+          username: (email || currentUser.email).split('@')[0], // استخدام الجزء الأول من البريد كـ username
           email: email || currentUser.email,
           phone: phone || currentUser.phone,
-          password: currentUser.password || '123456',
-          isActive: isActive !== undefined ? isActive : currentUser.isActive,
-          address: ''
-        });
+          isActive: isActive !== undefined ? isActive : currentUser.isActive
+        }).returning();
         
         // حذف من جدول adminUsers
-        await storage.deleteAdminUser(id);
+        await db.delete(schema.adminUsers).where(eq(schema.adminUsers.id, id));
         
         updatedUser = { ...newCustomer, role: 'customer' };
       }
       // تغيير من سائق إلى مدير أو العكس
       else if (targetTable === 'adminUsers') {
-        const result = await storage.updateAdminUser(id, {
-          ...updateData,
-          userType: role
-        });
-        updatedUser = { ...result, role: result?.userType };
+        updateData.userType = role;
+        
+        const [result] = await db.update(schema.adminUsers)
+          .set(updateData)
+          .where(eq(schema.adminUsers.id, id))
+          .returning();
+          
+        updatedUser = { ...result, role: result.userType };
       }
     } else {
       // تحديث عادي بدون تغيير الدور
       if (targetTable === 'customers') {
-        const result = await storage.updateUser(id, updateData);
+        // إزالة userType من updateData للعملاء
+        delete updateData.userType;
+        
+        const [result] = await db.update(schema.customers)
+          .set(updateData)
+          .where(eq(schema.customers.id, id))
+          .returning();
+          
         updatedUser = { ...result, role: 'customer' };
       } else {
-        const result = await storage.updateAdminUser(id, updateData);
-        updatedUser = { ...result, role: result?.userType };
+        // تحديث السائق/المدير
+        if (role && (role === 'driver' || role === 'admin')) {
+          updateData.userType = role;
+        }
+        
+        const [result] = await db.update(schema.adminUsers)
+          .set(updateData)
+          .where(eq(schema.adminUsers.id, id))
+          .returning();
+          
+        updatedUser = { ...result, role: result.userType };
       }
     }
 
@@ -1105,24 +1208,39 @@ router.delete("/users/:id", async (req, res) => {
     const { id } = req.params;
     
     // البحث عن المستخدم في جدول العملاء
-    const customer = await storage.getUserById(id);
-    if (customer) {
-      await storage.deleteUser(id);
-      return res.json({ success: true, message: "تم حذف العميل بنجاح" });
+    const customerResult = await db.select()
+      .from(schema.customers)
+      .where(eq(schema.customers.id, id))
+      .limit(1);
+    
+    if (customerResult.length > 0) {
+      // حذف العميل
+      await db.delete(schema.customers).where(eq(schema.customers.id, id));
+      res.json({ success: true, message: "تم حذف العميل بنجاح" });
+      return;
     }
     
     // البحث في جدول المديرين والسائقين
-    const admin = await storage.getAdminById(id);
-    if (admin) {
+    const adminResult = await db.select()
+      .from(schema.adminUsers)
+      .where(eq(schema.adminUsers.id, id))
+      .limit(1);
+    
+    if (adminResult.length > 0) {
+      const user = adminResult[0];
+      
       // منع حذف المدير الرئيسي
-      if (admin.userType === 'admin' && admin.email === 'admin@alsarie-one.com') {
+      if (user.userType === 'admin' && user.email === 'admin@alsarie-one.com') {
         return res.status(403).json({ error: "لا يمكن حذف المدير الرئيسي" });
       }
       
-      await storage.deleteAdminUser(id);
-      return res.json({ success: true, message: `تم حذف ${admin.userType === 'driver' ? 'السائق' : 'المدير'} بنجاح` });
+      // حذف السائق أو المدير
+      await db.delete(schema.adminUsers).where(eq(schema.adminUsers.id, id));
+      res.json({ success: true, message: `تم حذف ${user.userType === 'driver' ? 'السائق' : 'المدير'} بنجاح` });
+      return;
     }
     
+    // المستخدم غير موجود
     res.status(404).json({ error: "المستخدم غير موجود" });
   } catch (error) {
     console.error("خطأ في حذف المستخدم:", error);
@@ -1131,21 +1249,22 @@ router.delete("/users/:id", async (req, res) => {
 });
 
 // إدارة الملف الشخصي للمدير
-router.get("/profile", async (req, res) => {
+router.get("/profile", async (req: any, res) => {
   try {
-    const user = req.user!;
+    const admin = req.admin;
     // إرجاع بيانات المدير (بدون كلمة المرور)
-    const profile = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      username: user.username,
-      phone: user.phone,
-      userType: user.userType,
-      isActive: user.isActive
+    const adminProfile = {
+      id: admin.id,
+      name: admin.name,
+      email: admin.email,
+      username: admin.username,
+      phone: admin.phone,
+      userType: admin.userType,
+      isActive: admin.isActive,
+      createdAt: admin.createdAt
     };
     
-    res.json(profile);
+    res.json(adminProfile);
   } catch (error) {
     console.error("خطأ في جلب الملف الشخصي:", error);
     res.status(500).json({ error: "خطأ في الخادم" });
@@ -1153,37 +1272,44 @@ router.get("/profile", async (req, res) => {
 });
 
 // تحديث الملف الشخصي للمدير
-router.put("/profile", async (req, res) => {
+router.put("/profile", async (req: any, res) => {
   try {
     const { name, email, username, phone } = req.body;
-    const adminId = req.user!.id;
+    const adminId = req.admin.id;
 
     if (!name || !email) {
       return res.status(400).json({ error: "الاسم والبريد الإلكتروني مطلوبان" });
     }
 
     // التحقق من عدم تكرار البريد الإلكتروني
-    const allAdmins = await storage.getAllAdminUsers();
-    const duplicate = allAdmins.find(a => a.email === email && a.id !== adminId);
+    const existingAdmin = await db.select().from(schema.adminUsers).where(
+      and(
+        eq(schema.adminUsers.email, email),
+        sql`${schema.adminUsers.id} != ${adminId}`
+      )
+    );
 
-    if (duplicate) {
+    if (existingAdmin.length > 0) {
       return res.status(400).json({ error: "البريد الإلكتروني مستخدم بالفعل" });
     }
 
     // تحديث البيانات
-    const updatedAdmin = await storage.updateAdminUser(adminId, {
-      name,
-      email,
-      username: username || null,
-      phone: phone || null
-    });
+    const [updatedAdmin] = await db.update(schema.adminUsers)
+      .set({
+        name,
+        email,
+        username: username || null,
+        phone: phone || null
+      })
+      .where(eq(schema.adminUsers.id, adminId))
+      .returning();
 
     if (!updatedAdmin) {
       return res.status(404).json({ error: "المدير غير موجود" });
     }
 
     // إرجاع البيانات المحدثة (بدون كلمة المرور)
-    const profile = {
+    const adminProfile = {
       id: updatedAdmin.id,
       name: updatedAdmin.name,
       email: updatedAdmin.email,
@@ -1194,17 +1320,19 @@ router.put("/profile", async (req, res) => {
       createdAt: updatedAdmin.createdAt
     };
 
-    res.json(profile);
+    res.json(adminProfile);
   } catch (error) {
     console.error("خطأ في تحديث الملف الشخصي:", error);
     res.status(500).json({ error: "خطأ في الخادم" });
   }
 });
 
+// تم حذف مسار تغيير كلمة المرور - لا حاجة له بعد إزالة نظام المصادقة
+
 // UI Settings Routes
 router.get("/ui-settings", async (req, res) => {
   try {
-    const settings = await storage.getUiSettings();
+    const settings = await dbStorage.getUiSettings();
     res.json(settings);
   } catch (error) {
     console.error('خطأ في جلب إعدادات الواجهة:', error);
@@ -1224,7 +1352,15 @@ router.put("/ui-settings/:key", async (req, res) => {
       });
     }
 
-    const setting = await storage.updateUiSetting(key, String(value));
+    // Validate value is string
+    if (typeof value !== 'string') {
+      return res.status(400).json({ 
+        error: "Invalid value type",
+        details: "Value must be a string" 
+      });
+    }
+
+    const setting = await dbStorage.updateUiSetting(key, value);
     
     if (!setting) {
       return res.status(404).json({ error: "فشل في تحديث الإعداد" });

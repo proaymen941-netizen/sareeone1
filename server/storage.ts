@@ -12,7 +12,6 @@ import {
   type Cart, type InsertCart,
   type Favorites, type InsertFavorites,
   type AdminUser, type InsertAdminUser,
-  type AdminSession, type InsertAdminSession,
   type Notification, type InsertNotification
 } from "../shared/schema";
 import { randomUUID } from "crypto";
@@ -26,7 +25,6 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined>;
-  deleteUser(id: string): Promise<boolean>;
 
   // Categories
   getCategories(): Promise<Category[]>;
@@ -104,19 +102,12 @@ export interface IStorage {
   removeFromFavorites(userId: string, restaurantId: string): Promise<boolean>;
   isRestaurantFavorite(userId: string, restaurantId: string): Promise<boolean>;
 
-  // Admin methods
+  // Admin methods - بدون مصادقة
   createAdminUser(adminUser: InsertAdminUser): Promise<AdminUser>;
   getAllAdminUsers(): Promise<AdminUser[]>;
   getAdminByEmail(emailOrUsername: string): Promise<AdminUser | undefined>;
   getAdminByPhone(phone: string): Promise<AdminUser | undefined>;
   getAdminById(id: string): Promise<AdminUser | undefined>;
-  updateAdminUser(id: string, admin: Partial<InsertAdminUser>): Promise<AdminUser | undefined>;
-  deleteAdminUser(id: string): Promise<boolean>;
-
-  // Session methods
-  createAdminSession(session: InsertAdminSession): Promise<AdminSession>;
-  getAdminSession(token: string): Promise<AdminSession | undefined>;
-  deleteAdminSession(token: string): Promise<boolean>;
 
   // Notification methods
    // getNotifications(recipientId?: string, type?: string): Promise<Notification[]>;
@@ -150,7 +141,7 @@ export class MemStorage implements IStorage {
   private cartItems: Map<string, Cart>;
   private favorites: Map<string, Favorites>;
   private adminUsers: Map<string, AdminUser>;
-  private adminSessions: Map<string, AdminSession>;
+  // تم حذف adminSessions - لا حاجة لها بعد إزالة نظام المصادقة
   private notifications: Map<string, Notification>;
   private orderTracking: Map<string, {id: string; orderId: string; status: string; message: string; createdBy: string; createdByType: string; createdAt: Date}>;
 
@@ -173,7 +164,7 @@ export class MemStorage implements IStorage {
     this.cartItems = new Map();
     this.favorites = new Map();
     this.adminUsers = new Map();
-    this.adminSessions = new Map();
+    // تم حذف adminSessions من المنشئ
     this.notifications = new Map();
     this.orderTracking = new Map();
     
@@ -468,10 +459,6 @@ export class MemStorage implements IStorage {
     const updated = { ...existing, ...userData };
     this.users.set(id, updated);
     return updated;
-  }
-
-  async deleteUser(id: string): Promise<boolean> {
-    return this.users.delete(id);
   }
 
   // Categories
@@ -1034,38 +1021,7 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
     return this.adminUsers.get(id);
   }
 
-  async updateAdminUser(id: string, admin: Partial<InsertAdminUser>): Promise<AdminUser | undefined> {
-    const existing = this.adminUsers.get(id);
-    if (!existing) return undefined;
-    const updated = { ...existing, ...admin, updatedAt: new Date() } as AdminUser;
-    this.adminUsers.set(id, updated);
-    return updated;
-  }
-
-  async deleteAdminUser(id: string): Promise<boolean> {
-    return this.adminUsers.delete(id);
-  }
-
-  // Session methods
-  async createAdminSession(session: InsertAdminSession): Promise<AdminSession> {
-    const id = randomUUID();
-    const newSession: AdminSession = {
-      ...session,
-      id,
-      adminId: session.adminId ?? null,
-      createdAt: new Date()
-    };
-    this.adminSessions.set(session.token, newSession);
-    return newSession;
-  }
-
-  async getAdminSession(token: string): Promise<AdminSession | undefined> {
-    return this.adminSessions.get(token);
-  }
-
-  async deleteAdminSession(token: string): Promise<boolean> {
-    return this.adminSessions.delete(token);
-  }
+  // تم حذف جميع طرق إدارة الجلسات - لا حاجة لها بعد إزالة نظام المصادقة
 
   // Notification methods
   async getNotifications(recipientType?: string, recipientId?: string, unread?: boolean): Promise<Notification[]> {

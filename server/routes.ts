@@ -9,7 +9,6 @@ import driverRoutes from "./routes/driver";
 import ordersRoutes from "./routes/orders";
 import { adminRoutes } from "./routes/admin";
 import { registerAdvancedRoutes } from "./routes/advanced";
-import { requireAuth, requireRole } from "./auth";
 import { 
   insertRestaurantSchema, 
   insertMenuItemSchema, 
@@ -36,19 +35,15 @@ import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
 
-  // Auth Routes
-  app.use("/api/auth", authRoutes);
+  // تم حذف مسارات المصادقة - تم إزالة نظام المصادقة بالكامل
+
 
   // Admin and Advanced Routes
-  app.use("/api/admin", requireAuth, requireRole(['admin']), adminRoutes);
-  // registerAdvancedRoutes(app); // We'll move this below with proper protection
+  app.use("/api/admin", adminRoutes);
+  registerAdvancedRoutes(app);
 
   // Users
-  app.get("/api/users/me", requireAuth, async (req, res) => {
-    res.json(req.user);
-  });
-
-  app.get("/api/users/:id", requireAuth, requireRole(['admin']), async (req, res) => {
+  app.get("/api/users/:id", async (req, res) => {
     try {
       const { id } = req.params;
       const user = await storage.getUser(id);
@@ -1012,8 +1007,41 @@ app.get("/api/notifications", async (req, res) => {
     }
   });
 
+  // تم حذف مسارات المصادقة - لا حاجة لها
+  
+  // Register auth routes
+  app.use("/api/auth", authRoutes);
+  
+  // Register admin routes
+  app.use("/api/admin", adminRoutes);
+  
+  // Register customer routes
+  app.use("/api/customer", customerRoutes);
+  
+  // Register driver routes
+  app.use("/api/driver", driverRoutes);
+  
+  // Register orders routes
+  app.use("/api/orders", ordersRoutes);
+
+  // Enhanced notifications endpoint
+  app.get("/api/notifications", async (req, res) => {
+    try {
+      const { recipientType, recipientId, unread } = req.query;
+      const notifications = await storage.getNotifications(
+        recipientType as string, 
+        recipientId as string, 
+        unread === 'true'
+      );
+      res.json(notifications);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
   // Mark notification as read
-  app.put("/api/notifications/:id/read", requireAuth, async (req, res) => {
+  app.put("/api/notifications/:id/read", async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -1042,14 +1070,6 @@ app.get("/api/notifications", async (req, res) => {
       res.status(500).json({ message: "Failed to update notification" });
     }
   });
-
-  // Advanced Routes (Admin only)
-  registerAdvancedRoutes(app);
-
-  // Other routes registrations with protection
-  app.use("/api/customer", requireAuth, requireRole(['customer', 'admin']), customerRoutes);
-  app.use("/api/driver", requireAuth, requireRole(['driver', 'admin']), driverRoutes);
-  app.use("/api/orders", requireAuth, ordersRoutes);
 
   const httpServer = createServer(app);
   return httpServer;

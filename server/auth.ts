@@ -1,7 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { storage } from './storage';
-import { Request, Response, NextFunction } from 'express';
 import { 
   type InsertAdminUser, 
   type InsertAdminSession,
@@ -9,16 +8,6 @@ import {
   type Driver,
   type AdminUser
 } from '@shared/schema';
-
-// تمديد نوع الطلب ليشمل المستخدم
-declare global {
-  namespace Express {
-    interface Request {
-      user?: AuthUser;
-      token?: string;
-    }
-  }
-}
 
 // نوع المستخدم الموحد للمصادقة
 export interface AuthUser {
@@ -48,16 +37,7 @@ export class UnifiedAuthService {
 
   // التحقق من كلمة المرور
   async verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
-    try {
-      // محاولة التحقق باستخدام bcrypt أولاً
-      const isBcryptMatch = await bcrypt.compare(password, hashedPassword);
-      if (isBcryptMatch) return true;
-    } catch (e) {
-      // إذا لم يكن bcrypt، نقارن مباشرة (للانتقال التدريجي)
-    }
-    
-    // دعم كلمات المرور النصية العادية للمستخدمين القدامى
-    return password === hashedPassword;
+    return bcrypt.compare(password, hashedPassword);
   }
 
   // البحث عن المستخدم بالمعرف (اسم المستخدم، البريد الإلكتروني، أو رقم الهاتف)
@@ -426,37 +406,3 @@ export class UnifiedAuthService {
 
 // إنشاء مثيل خدمة المصادقة الموحدة
 export const unifiedAuthService = new UnifiedAuthService();
-
-// Middleware للتحقق من المصادقة
-export const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
-
-  if (!token) {
-    return res.status(401).json({ message: 'غير مصرح، يرجى تسجيل الدخول' });
-  }
-
-  const result = await unifiedAuthService.validateSession(token);
-  if (!result.valid || !result.user) {
-    return res.status(401).json({ message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى' });
-  }
-
-  req.user = result.user;
-  req.token = token;
-  next();
-};
-
-// Middleware للتحقق من الأدوار
-export const requireRole = (roles: ('customer' | 'driver' | 'admin')[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user) {
-      return res.status(401).json({ message: 'غير مصرح' });
-    }
-
-    if (!roles.includes(req.user.userType)) {
-      return res.status(403).json({ message: 'ليس لديك صلاحية للوصول إلى هذا المورد' });
-    }
-
-    next();
-  };
-};

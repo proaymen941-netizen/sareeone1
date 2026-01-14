@@ -2,14 +2,56 @@ import express from "express";
 import { storage } from "../storage";
 import { insertUserSchema, insertUserAddressSchema, insertRatingSchema, type UserAddress } from "../../shared/schema";
 import { randomUUID } from "crypto";
-import { requireAuth } from "../auth";
 
 const router = express.Router();
 
-// جلب ملف العميل (الحالي)
-router.get("/profile", requireAuth, async (req, res) => {
+// تسجيل عميل جديد أو تسجيل الدخول
+router.post("/auth", async (req, res) => {
   try {
-    const id = req.user!.id;
+    const { phone, name } = req.body;
+
+    if (!phone || !name) {
+      return res.status(400).json({ error: "رقم الهاتف والاسم مطلوبان" });
+    }
+
+    // البحث عن العميل بالهاتف (نحتاج طريقة للبحث بالهاتف)
+    // سنحتاج إلى تحديث الطريقة للبحث بالهاتف
+    // للآن سننشئ مستخدم جديد في كل مرة أو نبحث بطريقة أخرى
+    const userId = randomUUID();
+    const userData = {
+      username: phone, // استخدام رقم الهاتف كاسم المستخدم
+      password: "default_password", // كلمة مرور افتراضية
+      name,
+      phone,
+      email: null,
+      address: null
+    };
+
+    let customer;
+    try {
+      // محاولة البحث عن المستخدم أولاً
+      customer = await storage.getUserByUsername(phone);
+      if (!customer) {
+        // إنشاء عميل جديد
+        customer = await storage.createUser(userData);
+      }
+    } catch (error) {
+      // إنشاء عميل جديد في حالة عدم وجوده
+      customer = await storage.createUser(userData);
+    }
+
+    res.json(customer);
+  } catch (error) {
+    console.error("خطأ في مصادقة العميل:", error);
+    res.status(500).json({ error: "خطأ في الخادم" });
+  }
+});
+
+// جلب ملف العميل
+router.get("/:id/profile", async (req, res) => {
+  try {
+    const { id } = req.params;
+    
     const customer = await storage.getUser(id);
 
     if (!customer) {
@@ -24,9 +66,9 @@ router.get("/profile", requireAuth, async (req, res) => {
 });
 
 // تحديث ملف العميل
-router.put("/profile", requireAuth, async (req, res) => {
+router.put("/:id/profile", async (req, res) => {
   try {
-    const id = req.user!.id;
+    const { id } = req.params;
     const updateData = req.body;
 
     const updatedCustomer = await storage.updateUser(id, updateData);
@@ -43,12 +85,13 @@ router.put("/profile", requireAuth, async (req, res) => {
 });
 
 // جلب عناوين العميل
-router.get("/addresses", requireAuth, async (req, res) => {
+router.get("/:id/addresses", async (req, res) => {
   try {
-    const id = req.user!.id;
+    const { id } = req.params;
     
     const addresses = await storage.getUserAddresses(id);
     
+    // ترتيب العناوين (الافتراضي أولاً، ثم حسب تاريخ الإنشاء)
     addresses.sort((a: UserAddress, b: UserAddress) => {
       if (a.isDefault && !b.isDefault) return -1;
       if (!a.isDefault && b.isDefault) return 1;
@@ -63,12 +106,20 @@ router.get("/addresses", requireAuth, async (req, res) => {
 });
 
 // إضافة عنوان جديد
-router.post("/addresses", requireAuth, async (req, res) => {
+router.post("/:id/addresses", async (req, res) => {
   try {
-    const id = req.user!.id;
+    const { id } = req.params;
     const addressData = req.body;
 
+    // التحقق من وجود العميل
+    const customer = await storage.getUser(id);
+    if (!customer) {
+      return res.status(404).json({ error: "العميل غير موجود" });
+    }
+
+    // التحقق من صحة البيانات
     const validatedData = insertUserAddressSchema.omit({ id: true, userId: true, createdAt: true }).parse(addressData);
+
     const newAddress = await storage.createUserAddress(id, validatedData as any);
 
     res.json(newAddress);
@@ -83,13 +134,14 @@ router.post("/addresses", requireAuth, async (req, res) => {
 });
 
 // تحديث عنوان
-router.put("/addresses/:addressId", requireAuth, async (req, res) => {
+router.put("/:customerId/addresses/:addressId", async (req, res) => {
   try {
-    const customerId = req.user!.id;
-    const { addressId } = req.params;
+    const { customerId, addressId } = req.params;
     const updateData = req.body;
 
+    // التحقق من صحة البيانات
     const validatedData = insertUserAddressSchema.omit({ id: true, userId: true, createdAt: true }).partial().parse(updateData);
+
     const updatedAddress = await storage.updateUserAddress(addressId, customerId, validatedData);
 
     if (!updatedAddress) {
@@ -108,10 +160,9 @@ router.put("/addresses/:addressId", requireAuth, async (req, res) => {
 });
 
 // حذف عنوان
-router.delete("/addresses/:addressId", requireAuth, async (req, res) => {
+router.delete("/:customerId/addresses/:addressId", async (req, res) => {
   try {
-    const customerId = req.user!.id;
-    const { addressId } = req.params;
+    const { customerId, addressId } = req.params;
 
     const success = await storage.deleteUserAddress(addressId, customerId);
 
@@ -127,16 +178,21 @@ router.delete("/addresses/:addressId", requireAuth, async (req, res) => {
 });
 
 // جلب طلبات العميل
-router.get("/orders", requireAuth, async (req, res) => {
+router.get("/:id/orders", async (req, res) => {
   try {
-    const id = req.user!.id;
+    const { id } = req.params;
     const { page = 1, limit = 10 } = req.query;
     
+    // جلب جميع الطلبات
     const allOrders = await storage.getOrders();
+    
+    // فلترة طلبات العميل
     const customerOrders = allOrders.filter(order => order.customerId === id);
     
+    // ترتيب حسب التاريخ (الأحدث أولاً)
     customerOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     
+    // تطبيق الترقيم
     const startIndex = (Number(page) - 1) * Number(limit);
     const endIndex = startIndex + Number(limit);
     const paginatedOrders = customerOrders.slice(startIndex, endIndex);
@@ -149,30 +205,34 @@ router.get("/orders", requireAuth, async (req, res) => {
 });
 
 // تقييم طلب
-router.post("/orders/:orderId/review", requireAuth, async (req, res) => {
+router.post("/orders/:orderId/review", async (req, res) => {
   try {
     const { orderId } = req.params;
-    const customerId = req.user!.id;
-    const { rating, comment } = req.body;
+    const { customerId, rating, comment } = req.body;
 
+    // التحقق من وجود الطلب
     const order = await storage.getOrder(orderId);
     if (!order) {
       return res.status(404).json({ error: "الطلب غير موجود" });
     }
 
+    // التحقق من أن العميل يملك هذا الطلب
     if (order.customerId !== customerId) {
       return res.status(403).json({ error: "غير مصرح لك بتقييم هذا الطلب" });
     }
 
+    // التحقق من صحة بيانات التقييم
     if (!rating || rating < 1 || rating > 5) {
       return res.status(400).json({ error: "التقييم يجب أن يكون بين 1 و 5" });
     }
 
+    // الحصول على بيانات العميل
     const customer = await storage.getUser(customerId);
     if (!customer) {
       return res.status(404).json({ error: "العميل غير موجود" });
     }
 
+    // إنشاء تقييم جديد
     const reviewData = {
       orderId,
       restaurantId: order.restaurantId,
@@ -191,7 +251,5 @@ router.post("/orders/:orderId/review", requireAuth, async (req, res) => {
     res.status(500).json({ error: "خطأ في الخادم" });
   }
 });
-
-export { router as customerRoutes };
 
 export { router as customerRoutes };

@@ -1,15 +1,21 @@
 import express from "express";
 import { storage } from "../storage";
 import { z } from "zod";
-import { requireAuth } from "../auth";
 
 const router = express.Router();
 
+// تم حذف middleware المصادقة للسائق - الوصول مباشر للبيانات بدون مصادقة
+// الآن يتم تمرير driverId كمعامل في الطلبات
+
 // لوحة معلومات السائق
-router.get("/dashboard", requireAuth, async (req, res) => {
+router.get("/dashboard", async (req, res) => {
   try {
-    const driverId = req.user!.id;
+    const { driverId } = req.query;
     
+    if (!driverId || typeof driverId !== 'string') {
+      return res.status(400).json({ error: "معرف السائق مطلوب" });
+    }
+
     // التحقق من وجود السائق
     const driver = await storage.getDriver(driverId);
     if (!driver) {
@@ -49,7 +55,7 @@ router.get("/dashboard", requireAuth, async (req, res) => {
         completedToday: completedToday.length,
         totalOrders: driverOrders.length,
         totalEarnings,
-        averageRating: 4.5
+        averageRating: 4.5 // قيمة افتراضية حتى يتم تنفيذ نظام التقييم
       },
       availableOrders,
       currentOrders
@@ -61,10 +67,20 @@ router.get("/dashboard", requireAuth, async (req, res) => {
 });
 
 // قبول طلب
-router.post("/orders/:id/accept", requireAuth, async (req, res) => {
+router.post("/orders/:id/accept", async (req, res) => {
   try {
     const { id } = req.params;
-    const driverId = req.user!.id;
+    const { driverId } = req.body;
+    
+    if (!driverId) {
+      return res.status(400).json({ error: "معرف السائق مطلوب" });
+    }
+
+    // التحقق من وجود السائق
+    const driver = await storage.getDriver(driverId);
+    if (!driver) {
+      return res.status(404).json({ error: "السائق غير موجود" });
+    }
 
     // جلب الطلب
     const order = await storage.getOrder(id);
@@ -92,14 +108,13 @@ router.post("/orders/:id/accept", requireAuth, async (req, res) => {
 });
 
 // تحديث حالة الطلب
-router.put("/orders/:id/status", requireAuth, async (req, res) => {
+router.put("/orders/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
-    const driverId = req.user!.id;
-    const { status, location } = req.body;
+    const { driverId, status, location } = req.body;
     
-    if (!status) {
-      return res.status(400).json({ error: "الحالة مطلوبة" });
+    if (!driverId || !status) {
+      return res.status(400).json({ error: "معرف السائق والحالة مطلوبان" });
     }
 
     // جلب الطلب والتحقق من صلاحية السائق
@@ -133,10 +148,14 @@ router.put("/orders/:id/status", requireAuth, async (req, res) => {
 });
 
 // جلب تفاصيل طلب محدد
-router.get("/orders/:id", requireAuth, async (req, res) => {
+router.get("/orders/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const driverId = req.user!.id;
+    const { driverId } = req.query;
+    
+    if (!driverId || typeof driverId !== 'string') {
+      return res.status(400).json({ error: "معرف السائق مطلوب" });
+    }
 
     const order = await storage.getOrder(id);
     if (!order) {
@@ -156,10 +175,13 @@ router.get("/orders/:id", requireAuth, async (req, res) => {
 });
 
 // جلب طلبات السائق
-router.get("/orders", requireAuth, async (req, res) => {
+router.get("/orders", async (req, res) => {
   try {
-    const driverId = req.user!.id;
-    const { status } = req.query;
+    const { driverId, status } = req.query;
+    
+    if (!driverId || typeof driverId !== 'string') {
+      return res.status(400).json({ error: "معرف السائق مطلوب" });
+    }
 
     // جلب جميع الطلبات وفلترتها
     const allOrders = await storage.getOrders();
@@ -181,9 +203,13 @@ router.get("/orders", requireAuth, async (req, res) => {
 });
 
 // إحصائيات السائق
-router.get("/stats", requireAuth, async (req, res) => {
+router.get("/stats", async (req, res) => {
   try {
-    const driverId = req.user!.id;
+    const { driverId } = req.query;
+    
+    if (!driverId || typeof driverId !== 'string') {
+      return res.status(400).json({ error: "معرف السائق مطلوب" });
+    }
 
     // التحقق من وجود السائق
     const driver = await storage.getDriver(driverId);
@@ -216,7 +242,7 @@ router.get("/stats", requireAuth, async (req, res) => {
       totalEarnings,
       monthlyOrders: monthlyOrders.length,
       monthlyEarnings,
-      averageRating: 4.5,
+      averageRating: 4.5, // قيمة افتراضية
       successRate: driverOrders.length > 0 ? 
         Math.round((deliveredOrders.length / driverOrders.length) * 100) : 0
     });
@@ -227,10 +253,13 @@ router.get("/stats", requireAuth, async (req, res) => {
 });
 
 // تحديث الملف الشخصي
-router.put("/profile", requireAuth, async (req, res) => {
+router.put("/profile", async (req, res) => {
   try {
-    const driverId = req.user!.id;
-    const updateData = req.body;
+    const { driverId, ...updateData } = req.body;
+    
+    if (!driverId) {
+      return res.status(400).json({ error: "معرف السائق مطلوب" });
+    }
 
     // إزالة أي حقول غير مسموحة
     const allowedFields = ['name', 'phone', 'email', 'currentLocation', 'isAvailable'];

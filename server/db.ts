@@ -2,12 +2,11 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { 
-  adminUsers, adminSessions, categories, restaurantSections, restaurants, 
+  adminUsers, categories, restaurantSections, restaurants, 
   menuItems, users, customers, userAddresses, orders, specialOffers, 
   notifications, ratings, systemSettingsTable as systemSettings, drivers, orderTracking,
   cart, favorites,
   type AdminUser, type InsertAdminUser,
-  type AdminSession, type InsertAdminSession,
   type Category, type InsertCategory,
   type Restaurant, type InsertRestaurant,
   type RestaurantSection, type InsertRestaurantSection,
@@ -47,7 +46,6 @@ function getDb() {
     // Pass schema to enable db.query functionality
     const schema = {
       adminUsers,
-      adminSessions,
       categories,
       restaurantSections,
       restaurants,
@@ -108,16 +106,6 @@ export class DatabaseStorage {
     return result[0];
   }
 
-  async updateAdminUser(id: string, admin: Partial<InsertAdminUser>): Promise<AdminUser | undefined> {
-    const [updated] = await this.db.update(adminUsers).set({ ...admin, updatedAt: new Date() }).where(eq(adminUsers.id, id)).returning();
-    return updated;
-  }
-
-  async deleteAdminUser(id: string): Promise<boolean> {
-    const result = await this.db.delete(adminUsers).where(eq(adminUsers.id, id));
-    return result.rowCount > 0;
-  }
-
   // تم حذف وظائف AdminSession - لم تعد مطلوبة بعد إزالة نظام المصادقة
 
   // Users
@@ -144,11 +132,6 @@ export class DatabaseStorage {
   async updateUser(id: string, userData: Partial<InsertUser>): Promise<User | undefined> {
     const [updated] = await this.db.update(users).set(userData).where(eq(users.id, id)).returning();
     return updated;
-  }
-
-  async deleteUser(id: string): Promise<boolean> {
-    const result = await this.db.delete(users).where(eq(users.id, id));
-    return result.rowCount > 0;
   }
 
   // Categories
@@ -1048,41 +1031,6 @@ async getNotifications(recipientType?: string, recipientId?: string, unread?: bo
       .where(eq(ratings.id, id))
       .returning();
     return updated;
-  }
-
-  // Session Methods
-  async createAdminSession(session: InsertAdminSession): Promise<AdminSession> {
-    const [newSession] = await this.db.insert(adminSessions).values(session).returning();
-    return newSession;
-  }
-
-  async getAdminSession(token: string): Promise<AdminSession | undefined> {
-    const [session] = await this.db.select().from(adminSessions).where(eq(adminSessions.token, token));
-    return session;
-  }
-
-  async deleteAdminSession(token: string): Promise<boolean> {
-    const result = await this.db.delete(adminSessions).where(eq(adminSessions.token, token));
-    return result.rowCount > 0;
-  }
-
-  // Additional Auth Methods
-  async getUserById(id: string): Promise<User | undefined> {
-    const [user] = await this.db.select().from(users).where(eq(users.id, id));
-    return user;
-  }
-
-  async getDriverById(id: string): Promise<Driver | undefined> {
-    const [driver] = await this.db.select().from(drivers).where(eq(drivers.id, id));
-    return driver;
-  }
-
-  async getAllAdminUsers(): Promise<AdminUser[]> {
-    return await this.db.select().from(adminUsers);
-  }
-
-  async getAllDrivers(): Promise<Driver[]> {
-    return await this.db.select().from(drivers);
   }
 }
 
