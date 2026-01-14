@@ -1,23 +1,29 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, Truck, Save, X, Phone, MapPin, DollarSign, User } from 'lucide-react';
+import { Plus, Edit, Trash2, Truck, Save, X, Phone, MapPin, DollarSign, User, Wallet, History, CreditCard, ArrowUpDown, Receipt, Coins, Award, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
-import type { Driver } from '@shared/schema';
+import type { Driver, DriverTransaction, DriverBalance, DriverCommission } from '@shared/schema';
 
 export default function AdminDrivers() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
+  const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
+  const [isTransactionDialogOpen, setIsTransactionDialogOpen] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -26,10 +32,39 @@ export default function AdminDrivers() {
     currentLocation: '',
     isAvailable: true,
     isActive: true,
+    commissionRate: 70, // نسبة العمولة الافتراضية 70%
+  });
+
+  const [transactionData, setTransactionData] = useState({
+    amount: '',
+    type: 'commission' as 'commission' | 'salary' | 'bonus' | 'deduction' | 'withdrawal',
+    description: '',
+    referenceId: '',
+  });
+
+  const [commissionData, setCommissionData] = useState({
+    orderId: '',
+    orderAmount: '',
+    commissionRate: '',
   });
 
   const { data: drivers, isLoading } = useQuery<Driver[]>({
     queryKey: ['/api/drivers'],
+  });
+
+  const { data: driverBalance } = useQuery<DriverBalance>({
+    queryKey: ['/api/drivers', selectedDriver?.id, 'balance'],
+    enabled: !!selectedDriver,
+  });
+
+  const { data: driverTransactions } = useQuery<DriverTransaction[]>({
+    queryKey: ['/api/drivers', selectedDriver?.id, 'transactions'],
+    enabled: !!selectedDriver,
+  });
+
+  const { data: driverCommissions } = useQuery<DriverCommission[]>({
+    queryKey: ['/api/drivers', selectedDriver?.id, 'commissions'],
+    enabled: !!selectedDriver,
   });
 
   const createDriverMutation = useMutation({
@@ -55,6 +90,7 @@ export default function AdminDrivers() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/drivers'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/drivers', selectedDriver?.id, 'balance'] });
       toast({
         title: "تم تحديث السائق",
         description: "تم تحديث بيانات السائق بنجاح",
@@ -79,6 +115,68 @@ export default function AdminDrivers() {
     },
   });
 
+  const createTransactionMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', `/api/drivers/${selectedDriver?.id}/transactions`, {
+        ...transactionData,
+        amount: parseFloat(transactionData.amount),
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/drivers', selectedDriver?.id, 'balance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/drivers', selectedDriver?.id, 'transactions'] });
+      toast({
+        title: transactionData.type === 'withdrawal' ? "تم سحب المبلغ" : "تم إضافة المعاملة",
+        description: `تم ${transactionData.type === 'withdrawal' ? 'سحب' : 'إضافة'} ${transactionData.amount} ريال`,
+      });
+      resetTransactionForm();
+      setIsTransactionDialogOpen(false);
+    },
+  });
+
+  const createCommissionMutation = useMutation({
+    mutationFn: async () => {
+      const commissionAmount = (parseFloat(commissionData.orderAmount) * parseFloat(commissionData.commissionRate)) / 100;
+      const response = await apiRequest('POST', `/api/drivers/${selectedDriver?.id}/commissions`, {
+        orderId: commissionData.orderId,
+        orderAmount: parseFloat(commissionData.orderAmount),
+        commissionRate: parseFloat(commissionData.commissionRate),
+        commissionAmount,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/drivers', selectedDriver?.id, 'balance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/drivers', selectedDriver?.id, 'transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/drivers', selectedDriver?.id, 'commissions'] });
+      toast({
+        title: "تم إضافة العمولة",
+        description: "تم احتساب عمولة السائق بنجاح",
+      });
+      setCommissionData({
+        orderId: '',
+        orderAmount: '',
+        commissionRate: '',
+      });
+    },
+  });
+
+  const processWithdrawalMutation = useMutation({
+    mutationFn: async (amount: number) => {
+      const response = await apiRequest('POST', `/api/drivers/${selectedDriver?.id}/withdraw`, { amount });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/drivers', selectedDriver?.id, 'balance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/drivers', selectedDriver?.id, 'transactions'] });
+      toast({
+        title: "تم السحب",
+        description: "تم سحب المبلغ بنجاح",
+      });
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -87,8 +185,18 @@ export default function AdminDrivers() {
       currentLocation: '',
       isAvailable: true,
       isActive: true,
+      commissionRate: 70,
     });
     setEditingDriver(null);
+  };
+
+  const resetTransactionForm = () => {
+    setTransactionData({
+      amount: '',
+      type: 'commission',
+      description: '',
+      referenceId: '',
+    });
   };
 
   const handleEdit = (driver: Driver) => {
@@ -100,8 +208,14 @@ export default function AdminDrivers() {
       currentLocation: driver.currentLocation || '',
       isAvailable: driver.isAvailable,
       isActive: driver.isActive,
+      commissionRate: driver.commissionRate || 70,
     });
     setIsDialogOpen(true);
+  };
+
+  const handleManageAccount = (driver: Driver) => {
+    setSelectedDriver(driver);
+    setIsAccountDialogOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -136,11 +250,112 @@ export default function AdminDrivers() {
     }
   };
 
+  const handleTransactionSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!transactionData.amount || parseFloat(transactionData.amount) <= 0) {
+      toast({
+        title: "خطأ",
+        description: "يرجى إدخال مبلغ صحيح",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!transactionData.description.trim()) {
+      toast({
+        title: "خطأ",
+        description: "يرجى إدخال وصف للمعاملة",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createTransactionMutation.mutate();
+  };
+
+  const handleCommissionSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!commissionData.orderId.trim()) {
+      toast({
+        title: "خطأ",
+        description: "يرجى إدخال رقم الطلب",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!commissionData.orderAmount || parseFloat(commissionData.orderAmount) <= 0) {
+      toast({
+        title: "خطأ",
+        description: "يرجى إدخال مبلغ الطلب",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!commissionData.commissionRate || parseFloat(commissionData.commissionRate) <= 0) {
+      toast({
+        title: "خطأ",
+        description: "يرجى إدخال نسبة العمولة",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createCommissionMutation.mutate();
+  };
+
+  const handleWithdrawal = () => {
+    if (!driverBalance || driverBalance.availableBalance <= 0) {
+      toast({
+        title: "خطأ",
+        description: "لا يوجد رصيد متاح للسحب",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    processWithdrawalMutation.mutate(driverBalance.availableBalance);
+  };
+
   const toggleDriverStatus = (driver: Driver, field: 'isAvailable' | 'isActive') => {
     updateDriverMutation.mutate({
       id: driver.id,
       data: { [field]: !driver[field] }
     });
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('ar-SA', {
+      style: 'currency',
+      currency: 'SAR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('ar-SA', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const getTransactionTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      commission: 'عمولة',
+      salary: 'راتب',
+      bonus: 'مكافأة',
+      deduction: 'خصم',
+      withdrawal: 'سحب',
+      order: 'طلب',
+    };
+    return labels[type] || type;
   };
 
   return (
@@ -151,7 +366,7 @@ export default function AdminDrivers() {
           <Truck className="h-8 w-8 text-primary" />
           <div>
             <h1 className="text-2xl font-bold text-foreground">إدارة السائقين</h1>
-            <p className="text-muted-foreground">إدارة سائقي التوصيل</p>
+            <p className="text-muted-foreground">إدارة سائقي التوصيل وأرصدتهم</p>
           </div>
         </div>
         
@@ -225,6 +440,24 @@ export default function AdminDrivers() {
                   placeholder="الموقع الحالي للسائق"
                   data-testid="input-driver-location"
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="commissionRate">نسبة العمولة (%)</Label>
+                <Input
+                  id="commissionRate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={formData.commissionRate}
+                  onChange={(e) => setFormData(prev => ({ ...prev, commissionRate: parseInt(e.target.value) || 70 }))}
+                  placeholder="نسبة العمولة من كل طلب"
+                  required
+                  data-testid="input-driver-commission"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  النسبة المئوية التي يحصل عليها السائق من كل طلب
+                </p>
               </div>
 
               <div className="space-y-3">
@@ -322,8 +555,17 @@ export default function AdminDrivers() {
                   )}
                   
                   <div className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-foreground">الأرباح: {driver.earnings || 0} ريال</span>
+                    <Coins className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-foreground">
+                      نسبة العمولة: {driver.commissionRate || 70}%
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium text-foreground">
+                      الرصيد: {formatCurrency(driver.totalEarnings || 0)}
+                    </span>
                   </div>
                 </div>
 
@@ -359,12 +601,27 @@ export default function AdminDrivers() {
                   </Button>
                   
                   <Button
+                    variant="default"
+                    size="sm"
+                    className="flex-1 gap-2"
+                    onClick={() => handleManageAccount(driver)}
+                    data-testid={`button-manage-account-${driver.id}`}
+                  >
+                    <Wallet className="h-4 w-4" />
+                    إدارة الرصيد
+                  </Button>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button
                     variant="outline"
                     size="sm"
                     onClick={() => window.open(`tel:${driver.phone}`)}
+                    className="flex-1"
                     data-testid={`button-call-driver-${driver.id}`}
                   >
                     <Phone className="h-4 w-4" />
+                    اتصال
                   </Button>
                   
                   <AlertDialog>
@@ -412,6 +669,340 @@ export default function AdminDrivers() {
           </div>
         )}
       </div>
+
+      {/* Account Management Dialog */}
+      <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>
+              <div className="flex items-center gap-2">
+                <Wallet className="h-5 w-5" />
+                إدارة رصيد السائق: {selectedDriver?.name}
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <Tabs defaultValue="balance" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="balance">الرصيد والعمولات</TabsTrigger>
+              <TabsTrigger value="transactions">سجل المعاملات</TabsTrigger>
+              <TabsTrigger value="commissions">عمولات الطلبات</TabsTrigger>
+            </TabsList>
+            
+            {/* Balance Tab */}
+            <TabsContent value="balance" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      الرصيد الإجمالي
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-foreground">
+                      {formatCurrency(driverBalance?.totalBalance || 0)}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">مجموع الأرباح</p>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      الرصيد المتاح
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">
+                      {formatCurrency(driverBalance?.availableBalance || 0)}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">قابل للسحب</p>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      المسحوب
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-blue-600">
+                      {formatCurrency(driverBalance?.withdrawnAmount || 0)}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">إجمالي المسحوبات</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Add Manual Transaction */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">إضافة معاملة يدوية</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleTransactionSubmit} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="transactionType">نوع المعاملة</Label>
+                        <Select
+                          value={transactionData.type}
+                          onValueChange={(value: any) => setTransactionData(prev => ({ ...prev, type: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="اختر نوع المعاملة" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="commission">عمولة</SelectItem>
+                            <SelectItem value="salary">راتب</SelectItem>
+                            <SelectItem value="bonus">مكافأة</SelectItem>
+                            <SelectItem value="deduction">خصم</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="amount">المبلغ (ريال)</Label>
+                        <Input
+                          id="amount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={transactionData.amount}
+                          onChange={(e) => setTransactionData(prev => ({ ...prev, amount: e.target.value }))}
+                          placeholder="أدخل المبلغ"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="description">الوصف</Label>
+                        <Input
+                          id="description"
+                          value={transactionData.description}
+                          onChange={(e) => setTransactionData(prev => ({ ...prev, description: e.target.value }))}
+                          placeholder="وصف المعاملة"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="referenceId">رقم المرجع (اختياري)</Label>
+                        <Input
+                          id="referenceId"
+                          value={transactionData.referenceId}
+                          onChange={(e) => setTransactionData(prev => ({ ...prev, referenceId: e.target.value }))}
+                          placeholder="رقم الطلب أو المرجع"
+                        />
+                      </div>
+
+                      <Button type="submit" className="w-full" disabled={createTransactionMutation.isPending}>
+                        إضافة المعاملة
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+
+                {/* Add Commission for Order */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">إضافة عمولة طلب</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleCommissionSubmit} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="orderId">رقم الطلب</Label>
+                        <Input
+                          id="orderId"
+                          value={commissionData.orderId}
+                          onChange={(e) => setCommissionData(prev => ({ ...prev, orderId: e.target.value }))}
+                          placeholder="رقم الطلب"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="orderAmount">مبلغ الطلب (ريال)</Label>
+                        <Input
+                          id="orderAmount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={commissionData.orderAmount}
+                          onChange={(e) => setCommissionData(prev => ({ ...prev, orderAmount: e.target.value }))}
+                          placeholder="مبلغ الطلب"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="commissionRate">نسبة العمولة (%)</Label>
+                        <Input
+                          id="commissionRate"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={commissionData.commissionRate || selectedDriver?.commissionRate || 70}
+                          onChange={(e) => setCommissionData(prev => ({ ...prev, commissionRate: e.target.value }))}
+                          placeholder="نسبة العمولة"
+                          required
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          النسبة المئوية: {((parseFloat(commissionData.orderAmount || '0') * parseFloat(commissionData.commissionRate || '0')) / 100).toFixed(2)} ريال
+                        </p>
+                      </div>
+
+                      <Button type="submit" className="w-full" disabled={createCommissionMutation.isPending}>
+                        احتساب العمولة
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">سحب الرصيد</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">الرصيد المتاح للسحب</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {formatCurrency(driverBalance?.availableBalance || 0)}
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleWithdrawal}
+                      disabled={!driverBalance || driverBalance.availableBalance <= 0 || processWithdrawalMutation.isPending}
+                      className="gap-2"
+                    >
+                      <ArrowUpDown className="h-4 w-4" />
+                      سحب الرصيد
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    سيتم خصم الرصيد المتاح بالكامل وإضافته إلى سجل المسحوبات
+                  </p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            {/* Transactions Tab */}
+            <TabsContent value="transactions">
+              <Card>
+                <CardHeader>
+                  <CardTitle>سجل المعاملات</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>التاريخ</TableHead>
+                        <TableHead>النوع</TableHead>
+                        <TableHead>المبلغ</TableHead>
+                        <TableHead>الوصف</TableHead>
+                        <TableHead>الرصيد بعد</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {driverTransactions?.length ? (
+                        driverTransactions.map((transaction) => (
+                          <TableRow key={transaction.id}>
+                            <TableCell>{formatDate(transaction.createdAt)}</TableCell>
+                            <TableCell>
+                              <Badge variant={
+                                transaction.type === 'commission' || transaction.type === 'salary' || transaction.type === 'bonus'
+                                  ? 'default'
+                                  : transaction.type === 'deduction'
+                                  ? 'destructive'
+                                  : 'secondary'
+                              }>
+                                {getTransactionTypeLabel(transaction.type)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className={
+                              transaction.type === 'deduction' || transaction.type === 'withdrawal'
+                                ? 'text-red-600'
+                                : 'text-green-600'
+                            }>
+                              {transaction.type === 'deduction' || transaction.type === 'withdrawal' ? '-' : '+'}
+                              {formatCurrency(transaction.amount)}
+                            </TableCell>
+                            <TableCell>{transaction.description}</TableCell>
+                            <TableCell>{formatCurrency(transaction.balanceAfter)}</TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                            لا توجد معاملات
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            {/* Commissions Tab */}
+            <TabsContent value="commissions">
+              <Card>
+                <CardHeader>
+                  <CardTitle>عمولات الطلبات</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>رقم الطلب</TableHead>
+                        <TableHead>مبلغ الطلب</TableHead>
+                        <TableHead>نسبة العمولة</TableHead>
+                        <TableHead>قيمة العمولة</TableHead>
+                        <TableHead>التاريخ</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {driverCommissions?.length ? (
+                        driverCommissions.map((commission) => (
+                          <TableRow key={commission.id}>
+                            <TableCell className="font-medium">{commission.orderId}</TableCell>
+                            <TableCell>{formatCurrency(commission.orderAmount)}</TableCell>
+                            <TableCell>{commission.commissionRate}%</TableCell>
+                            <TableCell className="text-green-600 font-medium">
+                              {formatCurrency(commission.commissionAmount)}
+                            </TableCell>
+                            <TableCell>{formatDate(commission.createdAt)}</TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                            لا توجد عمولات
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsAccountDialogOpen(false);
+                setSelectedDriver(null);
+              }}
+            >
+              إغلاق
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
