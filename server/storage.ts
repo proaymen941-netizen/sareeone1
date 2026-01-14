@@ -12,7 +12,12 @@ import {
   type Cart, type InsertCart,
   type Favorites, type InsertFavorites,
   type AdminUser, type InsertAdminUser,
-  type Notification, type InsertNotification
+  type Notification, type InsertNotification,
+  // إضافة الأنواع الجديدة
+  type DriverBalance, type InsertDriverBalance,
+  type DriverTransaction, type InsertDriverTransaction,
+  type DriverCommission, type InsertDriverCommission,
+  type DriverWithdrawal, type InsertDriverWithdrawal
 } from "../shared/schema";
 import { randomUUID } from "crypto";
 
@@ -110,7 +115,6 @@ export interface IStorage {
   getAdminById(id: string): Promise<AdminUser | undefined>;
 
   // Notification methods
-   // getNotifications(recipientId?: string, type?: string): Promise<Notification[]>;
   createNotification(notification: InsertNotification): Promise<Notification>;
 
   // Order tracking methods
@@ -125,6 +129,33 @@ export interface IStorage {
   searchCategories(query: string): Promise<Category[]>;
   searchMenuItems(query: string): Promise<MenuItem[]>;
   searchMenuItemsAdvanced(query: string, filters?: any): Promise<MenuItem[]>;
+
+  // ==================== دوال جديدة للرصيد والعمولات ====================
+  
+  // إدارة أرصدة السائقين
+  getDriverBalance(driverId: string): Promise<DriverBalance | null>;
+  updateDriverBalance(driverId: string, data: { amount: number; type: string }): Promise<DriverBalance>;
+  createDriverBalance(data: InsertDriverBalance): Promise<DriverBalance>;
+  
+  // معاملات السائقين
+  createDriverTransaction(data: Omit<DriverTransaction, 'id' | 'createdAt' | 'balanceBefore' | 'balanceAfter'>): Promise<DriverTransaction>;
+  getDriverTransactions(driverId: string): Promise<DriverTransaction[]>;
+  getDriverTransactionsByType(driverId: string, type: string): Promise<DriverTransaction[]>;
+  
+  // عمولات السائقين
+  createDriverCommission(data: Omit<DriverCommission, 'id' | 'createdAt'>): Promise<DriverCommission>;
+  getDriverCommissions(driverId: string): Promise<DriverCommission[]>;
+  getDriverCommissionById(id: string): Promise<DriverCommission | null>;
+  updateDriverCommission(id: string, data: Partial<DriverCommission>): Promise<DriverCommission | null>;
+  
+  // سحوبات السائقين
+  createDriverWithdrawal(data: Omit<DriverWithdrawal, 'id' | 'createdAt'>): Promise<DriverWithdrawal>;
+  getDriverWithdrawals(driverId: string): Promise<DriverWithdrawal[]>;
+  getDriverWithdrawalById(id: string): Promise<DriverWithdrawal | null>;
+  updateWithdrawal(id: string, data: Partial<DriverWithdrawal>): Promise<DriverWithdrawal | null>;
+  
+  // تحديث حقل العمولة في الطلب
+  updateOrderCommission(id: string, data: { commissionRate: number; commissionAmount: string; commissionProcessed: boolean }): Promise<Order | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -141,9 +172,14 @@ export class MemStorage implements IStorage {
   private cartItems: Map<string, Cart>;
   private favorites: Map<string, Favorites>;
   private adminUsers: Map<string, AdminUser>;
-  // تم حذف adminSessions - لا حاجة لها بعد إزالة نظام المصادقة
   private notifications: Map<string, Notification>;
   private orderTracking: Map<string, {id: string; orderId: string; status: string; message: string; createdBy: string; createdByType: string; createdAt: Date}>;
+  
+  // خرائط جديدة لنظام الرصيد والعمولات
+  private driverBalances: Map<string, DriverBalance>;
+  private driverTransactions: Map<string, DriverTransaction>;
+  private driverCommissions: Map<string, DriverCommission>;
+  private driverWithdrawals: Map<string, DriverWithdrawal>;
 
   // Add db property for compatibility with routes that access it directly
   get db() {
@@ -164,9 +200,14 @@ export class MemStorage implements IStorage {
     this.cartItems = new Map();
     this.favorites = new Map();
     this.adminUsers = new Map();
-    // تم حذف adminSessions من المنشئ
     this.notifications = new Map();
     this.orderTracking = new Map();
+    
+    // تهيئة الخرائط الجديدة
+    this.driverBalances = new Map();
+    this.driverTransactions = new Map();
+    this.driverCommissions = new Map();
+    this.driverWithdrawals = new Map();
     
     this.initializeData();
   }
@@ -184,7 +225,7 @@ export class MemStorage implements IStorage {
     categories.forEach(cat => this.categories.set(cat.id, cat));
 
     // Initialize restaurants
- const restaurants = [
+    const restaurants = [
       {
         id: "1",
         name: "مطعم الوزيكو للعربكة",
@@ -268,12 +309,12 @@ export class MemStorage implements IStorage {
     restaurants.forEach(restaurant => this.restaurants.set(restaurant.id, restaurant));
 
     // Initialize menu items
-   const menuItems = [
+    const menuItems = [
       {
         id: "1",
         name: "عربكة بالقشطة والعسل",
         description: "حلوى يمنية تقليدية بالقشطة الطازجة والعسل الطبيعي",
-        price: "55", // تغيير إلى string
+        price: "55",
         image: "https://images.unsplash.com/photo-1551024506-0bccd828d307?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&h=200",
         category: "وجبات رمضان",
         isAvailable: true,
@@ -285,7 +326,7 @@ export class MemStorage implements IStorage {
         id: "2",
         name: "معصوب بالقشطة والعسل",
         description: "طبق يمني شعبي بالموز والقشطة والعسل",
-        price: "55", // تغيير إلى string
+        price: "55",
         image: "https://images.unsplash.com/photo-1565299507177-b0ac66763828?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&h=200",
         category: "وجبات رمضان",
         isAvailable: true,
@@ -297,7 +338,7 @@ export class MemStorage implements IStorage {
         id: "3",
         name: "مياه معدنية 750 مل",
         description: "مياه طبيعية معدنية عالية الجودة",
-        price: "3", // تغيير إلى string
+        price: "3",
         image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&h=200",
         category: "المشروبات",
         isAvailable: true,
@@ -309,8 +350,8 @@ export class MemStorage implements IStorage {
         id: "4",
         name: "كومبو عربكة خاص",
         description: "عربكة + مطبق عادي + مشروب غازي",
-        price: "55", // تغيير إلى string
-        originalPrice: "60", // تغيير إلى string
+        price: "55",
+        originalPrice: "60",
         image: "https://images.unsplash.com/photo-1565299507177-b0ac66763828?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&h=200",
         category: "العروض",
         isAvailable: true,
@@ -321,7 +362,7 @@ export class MemStorage implements IStorage {
 
     menuItems.forEach(item => this.menuItems.set(item.id, item));
 
-    // Initialize drivers
+    // Initialize drivers مع إضافة الحقول الجديدة
     const drivers = [
       {
         id: "1",
@@ -329,13 +370,17 @@ export class MemStorage implements IStorage {
         username: "ahmed_driver",
         email: "ahmed@drivers.com",
         phone: "+967771234567",
-        password: "123456", // كلمة مرور افتراضية للاختبار
+        password: "123456",
         userType: "driver",
         isAvailable: true,
         isActive: true,
         currentLocation: "صنعاء",
         earnings: "2500",
+        commissionRate: 70, // نسبة العمولة الجديدة
+        totalEarnings: 2500, // إجمالي الأرباح
+        averageRating: 4.5, // متوسط التقييم
         createdAt: new Date(),
+        updatedAt: new Date(),
       },
       {
         id: "2", 
@@ -343,16 +388,34 @@ export class MemStorage implements IStorage {
         username: "ali_driver",
         email: "ali@drivers.com",
         phone: "+967779876543",
-        password: "123456", // كلمة مرور افتراضية للاختبار
+        password: "123456",
         userType: "driver",
         isAvailable: true,
         isActive: true,
         currentLocation: "تعز",
         earnings: "3200",
+        commissionRate: 65, // نسبة العمولة الجديدة
+        totalEarnings: 3200, // إجمالي الأرباح
+        averageRating: 4.3, // متوسط التقييم
         createdAt: new Date(),
+        updatedAt: new Date(),
       }
     ];
     drivers.forEach(driver => this.drivers.set(driver.id, driver));
+
+    // تهيئة أرصدة السائقين
+    drivers.forEach(driver => {
+      const balance: DriverBalance = {
+        driverId: driver.id,
+        totalBalance: parseFloat(driver.earnings) || 0,
+        availableBalance: parseFloat(driver.earnings) || 0,
+        withdrawnAmount: 0,
+        pendingAmount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      this.driverBalances.set(driver.id, balance);
+    });
 
     // Initialize UI Settings
     const uiSettingsData = [
@@ -415,6 +478,220 @@ export class MemStorage implements IStorage {
 
     adminUsers.forEach(admin => this.adminUsers.set(admin.id, admin));
   }
+
+  // ==================== دوال نظام الرصيد والعمولات ====================
+
+  // إدارة أرصدة السائقين
+  async getDriverBalance(driverId: string): Promise<DriverBalance | null> {
+    const balance = this.driverBalances.get(driverId);
+    if (!balance) {
+      // إنشاء رصيد جديد إذا لم يكن موجودًا
+      const driver = this.drivers.get(driverId);
+      if (driver) {
+        const newBalance: DriverBalance = {
+          driverId,
+          totalBalance: parseFloat(driver.earnings) || 0,
+          availableBalance: parseFloat(driver.earnings) || 0,
+          withdrawnAmount: 0,
+          pendingAmount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        this.driverBalances.set(driverId, newBalance);
+        return newBalance;
+      }
+      return null;
+    }
+    return balance;
+  }
+
+  async updateDriverBalance(driverId: string, data: { amount: number; type: string }): Promise<DriverBalance> {
+    const balance = await this.getDriverBalance(driverId);
+    if (!balance) {
+      throw new Error("رصيد السائق غير موجود");
+    }
+
+    const { amount, type } = data;
+    let newTotalBalance = balance.totalBalance;
+    let newAvailableBalance = balance.availableBalance;
+    let newWithdrawnAmount = balance.withdrawnAmount;
+    let newPendingAmount = balance.pendingAmount;
+
+    switch (type) {
+      case 'commission':
+      case 'salary':
+      case 'bonus':
+        newTotalBalance += amount;
+        newAvailableBalance += amount;
+        break;
+      case 'deduction':
+        newTotalBalance -= amount;
+        newAvailableBalance -= amount;
+        break;
+      case 'withdrawal':
+        newAvailableBalance -= amount;
+        newWithdrawnAmount += amount;
+        newPendingAmount += amount;
+        break;
+      case 'withdrawal_approved':
+        newPendingAmount -= amount;
+        break;
+      case 'withdrawal_rejected':
+        newAvailableBalance += amount;
+        newPendingAmount -= amount;
+        break;
+    }
+
+    const updatedBalance: DriverBalance = {
+      ...balance,
+      totalBalance: newTotalBalance,
+      availableBalance: newAvailableBalance,
+      withdrawnAmount: newWithdrawnAmount,
+      pendingAmount: newPendingAmount,
+      updatedAt: new Date()
+    };
+
+    this.driverBalances.set(driverId, updatedBalance);
+    
+    // تحديث إجمالي أرباح السائق
+    const driver = this.drivers.get(driverId);
+    if (driver) {
+      this.drivers.set(driverId, {
+        ...driver,
+        totalEarnings: newTotalBalance,
+        updatedAt: new Date()
+      });
+    }
+
+    return updatedBalance;
+  }
+
+  async createDriverBalance(data: InsertDriverBalance): Promise<DriverBalance> {
+    const balance: DriverBalance = {
+      ...data,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.driverBalances.set(data.driverId, balance);
+    return balance;
+  }
+
+  // معاملات السائقين
+  async createDriverTransaction(data: Omit<DriverTransaction, 'id' | 'createdAt' | 'balanceBefore' | 'balanceAfter'>): Promise<DriverTransaction> {
+    const id = randomUUID();
+    const balance = await this.getDriverBalance(data.driverId);
+    
+    const transaction: DriverTransaction = {
+      ...data,
+      id,
+      balanceBefore: balance?.availableBalance || 0,
+      balanceAfter: (balance?.availableBalance || 0) + 
+        (data.type === 'commission' || data.type === 'salary' || data.type === 'bonus' ? data.amount : -data.amount),
+      createdAt: new Date()
+    };
+    
+    this.driverTransactions.set(id, transaction);
+    return transaction;
+  }
+
+  async getDriverTransactions(driverId: string): Promise<DriverTransaction[]> {
+    return Array.from(this.driverTransactions.values())
+      .filter(transaction => transaction.driverId === driverId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async getDriverTransactionsByType(driverId: string, type: string): Promise<DriverTransaction[]> {
+    return Array.from(this.driverTransactions.values())
+      .filter(transaction => transaction.driverId === driverId && transaction.type === type)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  // عمولات السائقين
+  async createDriverCommission(data: Omit<DriverCommission, 'id' | 'createdAt'>): Promise<DriverCommission> {
+    const id = randomUUID();
+    const commission: DriverCommission = {
+      ...data,
+      id,
+      status: data.status || 'approved',
+      createdAt: new Date()
+    };
+    
+    this.driverCommissions.set(id, commission);
+    return commission;
+  }
+
+  async getDriverCommissions(driverId: string): Promise<DriverCommission[]> {
+    return Array.from(this.driverCommissions.values())
+      .filter(commission => commission.driverId === driverId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async getDriverCommissionById(id: string): Promise<DriverCommission | null> {
+    const commission = this.driverCommissions.get(id);
+    return commission || null;
+  }
+
+  async updateDriverCommission(id: string, data: Partial<DriverCommission>): Promise<DriverCommission | null> {
+    const existing = this.driverCommissions.get(id);
+    if (!existing) return null;
+    
+    const updated = { ...existing, ...data };
+    this.driverCommissions.set(id, updated);
+    return updated;
+  }
+
+  // سحوبات السائقين
+  async createDriverWithdrawal(data: Omit<DriverWithdrawal, 'id' | 'createdAt'>): Promise<DriverWithdrawal> {
+    const id = randomUUID();
+    const withdrawal: DriverWithdrawal = {
+      ...data,
+      id,
+      status: data.status || 'pending',
+      processedAt: null,
+      createdAt: new Date()
+    };
+    
+    this.driverWithdrawals.set(id, withdrawal);
+    return withdrawal;
+  }
+
+  async getDriverWithdrawals(driverId: string): Promise<DriverWithdrawal[]> {
+    return Array.from(this.driverWithdrawals.values())
+      .filter(withdrawal => withdrawal.driverId === driverId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async getDriverWithdrawalById(id: string): Promise<DriverWithdrawal | null> {
+    const withdrawal = this.driverWithdrawals.get(id);
+    return withdrawal || null;
+  }
+
+  async updateWithdrawal(id: string, data: Partial<DriverWithdrawal>): Promise<DriverWithdrawal | null> {
+    const existing = this.driverWithdrawals.get(id);
+    if (!existing) return null;
+    
+    const updated = { ...existing, ...data };
+    this.driverWithdrawals.set(id, updated);
+    return updated;
+  }
+
+  // تحديث حقل العمولة في الطلب
+  async updateOrderCommission(id: string, data: { commissionRate: number; commissionAmount: string; commissionProcessed: boolean }): Promise<Order | undefined> {
+    const existing = this.orders.get(id);
+    if (!existing) return undefined;
+    
+    const updated = { 
+      ...existing, 
+      driverCommissionRate: data.commissionRate,
+      driverCommissionAmount: data.commissionAmount,
+      commissionProcessed: data.commissionProcessed
+    };
+    
+    this.orders.set(id, updated);
+    return updated;
+  }
+
+  // ==================== الدوال الحالية مع التعديلات ====================
 
   // Users
   async getUsers(): Promise<User[]> {
@@ -530,66 +807,64 @@ export class MemStorage implements IStorage {
   }
 
   async createRestaurant(restaurant: InsertRestaurant): Promise<Restaurant> {
-  const id = randomUUID();
-  const newRestaurant: Restaurant = { 
-    ...restaurant, 
-    id, 
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    description: restaurant.description ?? null,
-    phone: restaurant.phone ?? null,
-    rating: restaurant.rating ?? "0.0",
-    reviewCount: restaurant.reviewCount ?? 0,
-    isOpen: restaurant.isOpen ?? true,
-    minimumOrder: restaurant.minimumOrder?.toString() ?? "0",
-    deliveryFee: restaurant.deliveryFee?.toString() ?? "0",
-    categoryId: restaurant.categoryId ?? null,
-    // معالجة الخصائص الجديدة لضمان عدم وجود undefined
-    openingTime: restaurant.openingTime ?? "08:00",
-    closingTime: restaurant.closingTime ?? "23:00",
-    workingDays: restaurant.workingDays ?? "0,1,2,3,4,5,6",
-    isTemporarilyClosed: restaurant.isTemporarilyClosed ?? false,
-    temporaryCloseReason: restaurant.temporaryCloseReason ?? null,
-    latitude: restaurant.latitude ?? null,
-    longitude: restaurant.longitude ?? null,
-    address: restaurant.address ?? null,
-    isFeatured: restaurant.isFeatured ?? false,
-    isNew: restaurant.isNew ?? false,
-    isActive: restaurant.isActive ?? true
-  };
-  this.restaurants.set(id, newRestaurant);
-  return newRestaurant;
-}
-async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promise<Restaurant | undefined> {
-  const existing = this.restaurants.get(id);
-  if (!existing) return undefined;
-  
-  // معالجة الخصائص لتجنب undefined
-  const updates: Partial<Restaurant> = {};
-  
-  if (restaurant.phone !== undefined) updates.phone = restaurant.phone ?? null;
-  if (restaurant.openingTime !== undefined) updates.openingTime = restaurant.openingTime ?? null;
-  if (restaurant.closingTime !== undefined) updates.closingTime = restaurant.closingTime ?? null;
-  if (restaurant.workingDays !== undefined) updates.workingDays = restaurant.workingDays ?? null;
-  if (restaurant.isTemporarilyClosed !== undefined) updates.isTemporarilyClosed = restaurant.isTemporarilyClosed;
-  if (restaurant.temporaryCloseReason !== undefined) updates.temporaryCloseReason = restaurant.temporaryCloseReason ?? null;
-  
-  // الخصائص الأخرى
-  if (restaurant.name !== undefined) updates.name = restaurant.name;
-  if (restaurant.description !== undefined) updates.description = restaurant.description ?? null;
-  if (restaurant.image !== undefined) updates.image = restaurant.image;
-  if (restaurant.rating !== undefined) updates.rating = restaurant.rating ?? "0.0";
-  if (restaurant.reviewCount !== undefined) updates.reviewCount = restaurant.reviewCount ?? 0;
-  if (restaurant.deliveryTime !== undefined) updates.deliveryTime = restaurant.deliveryTime;
-  if (restaurant.isOpen !== undefined) updates.isOpen = restaurant.isOpen ?? true;
-  if (restaurant.minimumOrder !== undefined) updates.minimumOrder = restaurant.minimumOrder?.toString() ?? "0";
-  if (restaurant.deliveryFee !== undefined) updates.deliveryFee = restaurant.deliveryFee?.toString() ?? "0";
-  if (restaurant.categoryId !== undefined) updates.categoryId = restaurant.categoryId ?? null;
-  
-  const updated = { ...existing, ...updates };
-  this.restaurants.set(id, updated);
-  return updated;
-}
+    const id = randomUUID();
+    const newRestaurant: Restaurant = { 
+      ...restaurant, 
+      id, 
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      description: restaurant.description ?? null,
+      phone: restaurant.phone ?? null,
+      rating: restaurant.rating ?? "0.0",
+      reviewCount: restaurant.reviewCount ?? 0,
+      isOpen: restaurant.isOpen ?? true,
+      minimumOrder: restaurant.minimumOrder?.toString() ?? "0",
+      deliveryFee: restaurant.deliveryFee?.toString() ?? "0",
+      categoryId: restaurant.categoryId ?? null,
+      openingTime: restaurant.openingTime ?? "08:00",
+      closingTime: restaurant.closingTime ?? "23:00",
+      workingDays: restaurant.workingDays ?? "0,1,2,3,4,5,6",
+      isTemporarilyClosed: restaurant.isTemporarilyClosed ?? false,
+      temporaryCloseReason: restaurant.temporaryCloseReason ?? null,
+      latitude: restaurant.latitude ?? null,
+      longitude: restaurant.longitude ?? null,
+      address: restaurant.address ?? null,
+      isFeatured: restaurant.isFeatured ?? false,
+      isNew: restaurant.isNew ?? false,
+      isActive: restaurant.isActive ?? true
+    };
+    this.restaurants.set(id, newRestaurant);
+    return newRestaurant;
+  }
+
+  async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promise<Restaurant | undefined> {
+    const existing = this.restaurants.get(id);
+    if (!existing) return undefined;
+    
+    const updates: Partial<Restaurant> = {};
+    
+    if (restaurant.phone !== undefined) updates.phone = restaurant.phone ?? null;
+    if (restaurant.openingTime !== undefined) updates.openingTime = restaurant.openingTime ?? null;
+    if (restaurant.closingTime !== undefined) updates.closingTime = restaurant.closingTime ?? null;
+    if (restaurant.workingDays !== undefined) updates.workingDays = restaurant.workingDays ?? null;
+    if (restaurant.isTemporarilyClosed !== undefined) updates.isTemporarilyClosed = restaurant.isTemporarilyClosed;
+    if (restaurant.temporaryCloseReason !== undefined) updates.temporaryCloseReason = restaurant.temporaryCloseReason ?? null;
+    
+    if (restaurant.name !== undefined) updates.name = restaurant.name;
+    if (restaurant.description !== undefined) updates.description = restaurant.description ?? null;
+    if (restaurant.image !== undefined) updates.image = restaurant.image;
+    if (restaurant.rating !== undefined) updates.rating = restaurant.rating ?? "0.0";
+    if (restaurant.reviewCount !== undefined) updates.reviewCount = restaurant.reviewCount ?? 0;
+    if (restaurant.deliveryTime !== undefined) updates.deliveryTime = restaurant.deliveryTime;
+    if (restaurant.isOpen !== undefined) updates.isOpen = restaurant.isOpen ?? true;
+    if (restaurant.minimumOrder !== undefined) updates.minimumOrder = restaurant.minimumOrder?.toString() ?? "0";
+    if (restaurant.deliveryFee !== undefined) updates.deliveryFee = restaurant.deliveryFee?.toString() ?? "0";
+    if (restaurant.categoryId !== undefined) updates.categoryId = restaurant.categoryId ?? null;
+    
+    const updated = { ...existing, ...updates };
+    this.restaurants.set(id, updated);
+    return updated;
+  }
 
   async deleteRestaurant(id: string): Promise<boolean> {
     return this.restaurants.delete(id);
@@ -631,7 +906,7 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
     return this.menuItems.delete(id);
   }
 
-  // Orders
+  // Orders مع دعم حقول العمولة الجديدة
   async getOrders(): Promise<Order[]> {
     return Array.from(this.orders.values());
   }
@@ -660,7 +935,11 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
       estimatedTime: order.estimatedTime ?? "30-45 دقيقة",
       driverEarnings: order.driverEarnings?.toString() ?? "0",
       restaurantId: order.restaurantId ?? null,
-      driverId: order.driverId ?? null
+      driverId: order.driverId ?? null,
+      // حقول العمولة الجديدة
+      driverCommissionRate: order.driverCommissionRate ?? null,
+      driverCommissionAmount: order.driverCommissionAmount ?? null,
+      commissionProcessed: order.commissionProcessed ?? false
     };
     this.orders.set(id, newOrder);
     return newOrder;
@@ -674,7 +953,7 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
     return updated;
   }
 
-  // Drivers
+  // Drivers مع الحقول الجديدة
   async getDrivers(): Promise<Driver[]> {
     return Array.from(this.drivers.values());
   }
@@ -695,12 +974,13 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
     return Array.from(this.drivers.values()).filter(driver => driver.isAvailable && driver.isActive);
   }
 
- async createDriver(driver: InsertDriver): Promise<Driver> {
+  async createDriver(driver: InsertDriver): Promise<Driver> {
     const id = randomUUID();
     const newDriver: Driver = { 
       ...driver, 
       id, 
       createdAt: new Date(),
+      updatedAt: new Date(),
       isActive: driver.isActive ?? true,
       isAvailable: driver.isAvailable ?? true,
       currentLocation: driver.currentLocation ?? null,
@@ -708,7 +988,11 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
       username: driver.username ?? null,
       email: driver.email ?? null,
       userType: driver.userType ?? "driver",
-      password: driver.password // إضافة حقل كلمة المرور
+      password: driver.password,
+      // الحقول الجديدة
+      commissionRate: driver.commissionRate ?? 70,
+      totalEarnings: parseFloat(driver.earnings || "0") || 0,
+      averageRating: driver.averageRating ?? 0
     };
     this.drivers.set(id, newDriver);
     return newDriver;
@@ -717,12 +1001,39 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
   async updateDriver(id: string, driver: Partial<InsertDriver>): Promise<Driver | undefined> {
     const existing = this.drivers.get(id);
     if (!existing) return undefined;
+    
+    // تحديث الرصيد إذا تغيرت الأرباح
+    if (driver.earnings !== undefined) {
+      const balance = await this.getDriverBalance(id);
+      if (balance) {
+        const earningsDiff = parseFloat(driver.earnings) - parseFloat(existing.earnings);
+        if (earningsDiff !== 0) {
+          await this.updateDriverBalance(id, {
+            amount: Math.abs(earningsDiff),
+            type: earningsDiff > 0 ? 'commission' : 'deduction'
+          });
+        }
+      }
+    }
+    
     const updated = { ...existing, ...driver };
     this.drivers.set(id, updated);
     return updated;
   }
 
   async deleteDriver(id: string): Promise<boolean> {
+    // حذف جميع البيانات المرتبطة بالسائق
+    this.driverBalances.delete(id);
+    Array.from(this.driverTransactions.entries())
+      .filter(([_, transaction]) => transaction.driverId === id)
+      .forEach(([key, _]) => this.driverTransactions.delete(key));
+    Array.from(this.driverCommissions.entries())
+      .filter(([_, commission]) => commission.driverId === id)
+      .forEach(([key, _]) => this.driverCommissions.delete(key));
+    Array.from(this.driverWithdrawals.entries())
+      .filter(([_, withdrawal]) => withdrawal.driverId === id)
+      .forEach(([key, _]) => this.driverWithdrawals.delete(key));
+    
     return this.drivers.delete(id);
   }
 
@@ -735,7 +1046,6 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
     return Array.from(this.specialOffers.values()).filter(offer => offer.isActive);
   }
 
-
   async createSpecialOffer(offer: InsertSpecialOffer): Promise<SpecialOffer> {
     const id = randomUUID();
     const newOffer: SpecialOffer = { 
@@ -743,9 +1053,9 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
       id, 
       createdAt: new Date(),
       isActive: offer.isActive ?? true,
-      minimumOrder: offer.minimumOrder?.toString() ?? "0", // تحويل إلى string
+      minimumOrder: offer.minimumOrder?.toString() ?? "0",
       discountPercent: offer.discountPercent ?? null,
-      discountAmount: offer.discountAmount?.toString() ?? null, // تحويل إلى string
+      discountAmount: offer.discountAmount?.toString() ?? null,
       validUntil: offer.validUntil ?? null
     };
     this.specialOffers.set(id, newOffer);
@@ -780,7 +1090,6 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
       this.uiSettings.set(key, updated);
       return updated;
     }
-    // Create new setting if it doesn't exist
     const newSetting: UiSettings = {
       id: randomUUID(),
       key,
@@ -822,7 +1131,6 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
   async createUserAddress(userId: string, address: InsertUserAddress): Promise<UserAddress> {
     const id = randomUUID();
     
-    // If this is being set as default, unset other defaults for this user
     if (address.isDefault) {
       const userAddresses = await this.getUserAddresses(userId);
       userAddresses.forEach(addr => {
@@ -851,7 +1159,6 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
     const existing = this.userAddresses.get(addressId);
     if (!existing || existing.userId !== userId) return undefined;
     
-    // If this is being set as default, unset other defaults for this user
     if (address.isDefault) {
       const userAddresses = await this.getUserAddresses(userId);
       userAddresses.forEach(addr => {
@@ -1021,8 +1328,6 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
     return this.adminUsers.get(id);
   }
 
-  // تم حذف جميع طرق إدارة الجلسات - لا حاجة لها بعد إزالة نظام المصادقة
-
   // Notification methods
   async getNotifications(recipientType?: string, recipientId?: string, unread?: boolean): Promise<Notification[]> {
     let notifications = Array.from(this.notifications.values());
@@ -1061,8 +1366,6 @@ async updateRestaurant(id: string, restaurant: Partial<InsertRestaurant>): Promi
       .filter(restaurant => {
         const matchesName = restaurant.name.toLowerCase().includes(searchTerm);
         const matchesDescription = restaurant.description?.toLowerCase().includes(searchTerm);
-        // إزالة cuisine و area مؤقتاً حتى يتم إضافتهما للـ schema
-        
         const matchesQuery = matchesName || matchesDescription;
         const matchesCategory = !category || restaurant.categoryId === category;
         
