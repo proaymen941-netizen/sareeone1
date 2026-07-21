@@ -1321,14 +1321,6 @@ async getNotifications(recipientType?: string, recipientId?: string, unread?: bo
     return updated;
   }
 
-  // Order Tracking Functions
-  async createOrderTracking(tracking: any): Promise<any> {
-    const [newTracking] = await this.db.insert(orderTracking).values(tracking).returning();
-    return newTracking;
-  }
-
- 
-
   // Cart Functions - وظائف السلة
   async getCartItems(userId: string): Promise<any[]> {
     try {
