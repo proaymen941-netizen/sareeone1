@@ -21,7 +21,28 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
-    chunkSizeWarningLimit: 1500,
+    chunkSizeWarningLimit: 3000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom"],
+          "vendor-ui": [
+            "@radix-ui/react-dialog",
+            "@radix-ui/react-dropdown-menu",
+            "@radix-ui/react-select",
+            "@radix-ui/react-tabs",
+            "@radix-ui/react-toast",
+            "framer-motion",
+            "lucide-react",
+          ],
+          "vendor-charts": ["recharts"],
+          "vendor-maps": ["leaflet", "react-leaflet"],
+          "vendor-pdf": ["jspdf", "jspdf-autotable"],
+          "vendor-query": ["@tanstack/react-query"],
+          "vendor-forms": ["react-hook-form", "@hookform/resolvers", "zod"],
+        },
+      },
+    },
   },
   server: {
     host: "0.0.0.0",

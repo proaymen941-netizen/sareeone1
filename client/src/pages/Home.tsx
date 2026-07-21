@@ -87,7 +87,7 @@ export default function Home() {
                   <img 
                     src={offer.image} 
                     alt={offer.title}
-                    className="w-full h-full object-contain transform scale-100 group-hover:scale-105 transition-transform duration-[10s]"
+                    className="w-full h-full object-contain transform scale-100 group-hover:scale-105 transition-transform [transition-duration:10s]"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent flex flex-col justify-end p-4 md:p-16 text-white text-right">
                     <div className="flex flex-col gap-1 items-end max-w-4xl mr-auto">
