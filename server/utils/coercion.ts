@@ -9,7 +9,7 @@ export function coerceRequestData(data: any) {
     'salaryAmount', 'earnings', 'price', 'originalPrice', 'amount', 
     'subtotal', 'total', 'totalAmount', 'distance', 'driverEarnings', 
     'restaurantEarnings', 'companyEarnings', 'totalBalance', 'availableBalance', 
-    'withdrawnAmount', 'pendingAmount', 'balanceBefore', 'balanceAfter'
+    'withdrawnAmount', 'pendingAmount', 'balanceBefore', 'balanceAfter', 'bundlePrice'
   ];
   
   decimalFields.forEach(field => {

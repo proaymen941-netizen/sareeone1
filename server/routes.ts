@@ -244,7 +244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Disable caching to see changes
       res.set('Cache-Control', 'no-store');
       
-      const { active } = req.query;
+      const { active, restaurantId, offerType } = req.query;
       let offers;
       
       // Default to active offers for homepage
@@ -252,6 +252,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         offers = await storage.getSpecialOffers();
       } else {
         offers = await storage.getActiveSpecialOffers();
+      }
+
+      // فلترة حسب المتجر
+      if (restaurantId) {
+        offers = offers.filter((o: any) => o.restaurantId === restaurantId);
+      }
+
+      // فلترة حسب نوع العرض
+      if (offerType) {
+        offers = offers.filter((o: any) => (o.offerType || 'discount') === offerType);
       }
       
       log("📊 Found offers: " + offers.length + " offers");

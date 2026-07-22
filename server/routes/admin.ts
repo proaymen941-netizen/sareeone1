@@ -1671,21 +1671,28 @@ router.post("/special-offers", async (req, res) => {
     const coercedData = coerceRequestData(req.body);
     
     // تقديم قيم افتراضية للحقول المطلوبة
-    const offerData = {
+    const offerData: any = {
       // الحقول المطلوبة
       title: coercedData.title || "عرض خاص جديد",
       description: coercedData.description || "وصف العرض الخاص",
       image: coercedData.image || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg",
       
-      // تفاصيل الخصم (الآن مع تحويل صحيح للأنواع)
+      // نوع العرض: discount | bundle
+      offerType: coercedData.offerType || "discount",
+      
+      // تفاصيل الخصم (للعروض من نوع discount)
       discountPercent: coercedData.discountPercent,
       discountAmount: coercedData.discountAmount,
+      discountScope: coercedData.discountScope || "store",
       minimumOrder: coercedData.minimumOrder || "0",
       
-      // صلاحية العرض (الآن مع معالجة صحيحة للتاريخ)
+      // سعر المجموعة (للعروض من نوع bundle)
+      bundlePrice: coercedData.bundlePrice,
+      
+      // صلاحية العرض
       validUntil: coercedData.validUntil,
       
-      // حالة العرض (الآن مع تحويل صحيح للبوليان)
+      // حالة العرض
       isActive: coercedData.isActive !== undefined ? coercedData.isActive : true,
       
       restaurantId: coercedData.restaurantId,
@@ -1785,6 +1792,28 @@ router.put("/special-offers/:id", async (req, res) => {
     
     // التحقق من صحة البيانات المحدثة (جزئي)
     const validatedData = insertSpecialOfferSchema.partial().parse(coercedData);
+
+    // إذا تم تغيير المتجر أو طلب إنشاء قسم تلقائياً، نتحقق من وجود قسم "العروض"
+    if (validatedData.restaurantId && (req.body.autoCreateOffersSection || !validatedData.sectionId)) {
+      try {
+        const existingSections = await storage.getRestaurantSections(validatedData.restaurantId);
+        let offersSection = existingSections.find((s: any) => s.name === 'العروض' || s.name === 'Offers');
+        if (!offersSection) {
+          offersSection = await storage.createRestaurantSection({
+            restaurantId: validatedData.restaurantId,
+            name: 'العروض',
+            description: 'العروض الخاصة لهذا المتجر',
+            sortOrder: -1,
+            isActive: true,
+          } as any);
+        }
+        if (offersSection && !validatedData.sectionId) {
+          (validatedData as any).sectionId = offersSection.id;
+        }
+      } catch (secErr) {
+        console.error('Error ensuring offers section for store on update:', secErr);
+      }
+    }
     
     const updatedOffer = await storage.updateSpecialOffer(id, validatedData);
     

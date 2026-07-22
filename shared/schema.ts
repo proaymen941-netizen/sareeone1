@@ -189,9 +189,16 @@ export const specialOffers = pgTable("special_offers", {
   title: varchar("title", { length: 200 }).notNull(),
   description: text("description").notNull(), // تم تغيير إلى notNull
   image: text("image").notNull(), // تمت الإضافة
+  // نوع العرض: 'discount' (خصم) | 'bundle' (مجموعة منتجات بسعر محدد)
+  offerType: varchar("offer_type", { length: 20 }).default("discount").notNull(),
+  // حقول الخصم
   discountPercent: integer("discount_percent"),
   discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }),
   minimumOrder: decimal("minimum_order", { precision: 10, scale: 2 }).default("0"),
+  // نطاق تطبيق الخصم: 'store' (كامل المتجر) | 'section' (قسم محدد) | 'category' (تصنيف محدد)
+  discountScope: varchar("discount_scope", { length: 20 }).default("store"),
+  // حقول المجموعة (bundle)
+  bundlePrice: decimal("bundle_price", { precision: 10, scale: 2 }),
   restaurantId: uuid("restaurant_id").references(() => restaurants.id), // ربط العرض بمطعم محدد
   categoryId: uuid("category_id").references(() => categories.id), // ربط العرض بتصنيف محدد
   sectionId: uuid("section_id").references(() => restaurantSections.id), // ربط العرض بقسم داخل المتجر
