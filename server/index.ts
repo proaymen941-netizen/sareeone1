@@ -96,7 +96,7 @@ app.use((req, res, next) => {
     });
 
     // ===== مؤقت تفعيل الطلبات المجدولة =====
-    // كل دقيقة: ابحث عن طلبات scheduled موعدها خلال 30 دقيقة أو أقل وفعّلها
+    // كل دقيقة: ابحث عن طلبات scheduled موعدها خلال 15 دقيقة أو أقل وفعّلها
     setInterval(async () => {
       try {
         const allOrders = await storage.getOrders();
@@ -110,7 +110,7 @@ app.use((req, res, next) => {
         }
 
         const now = new Date();
-        const thirtyMinutesFromNow = new Date(now.getTime() + 30 * 60 * 1000);
+        const thirtyMinutesFromNow = new Date(now.getTime() + 15 * 60 * 1000);
 
         // تفعيل طلبات الطعام المجدولة
         for (const order of scheduledOrders) {
