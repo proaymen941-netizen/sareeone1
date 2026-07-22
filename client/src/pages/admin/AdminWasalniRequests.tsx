@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Bike, MapPin, Clock, Phone, User, Eye, CheckCircle, XCircle, Truck, Search, UserCheck, Plus, Navigation, Loader2 } from 'lucide-react';
+import { Bike, MapPin, Clock, Phone, User, Eye, CheckCircle, XCircle, Truck, Search, UserCheck, Plus, Navigation, Loader2, FileText } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { generateOrderPDF } from '@/lib/generateOrderPDF';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'قيد الانتظار',
@@ -50,6 +51,7 @@ export default function AdminWasalniRequests() {
   const [cancelReason, setCancelReason] = useState('');
   const [estimatedFee, setEstimatedFee] = useState('');
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
+  const [pdfLoadingIds, setPdfLoadingIds] = useState<Set<string>>(new Set());
 
   const { data: requests = [], isLoading } = useQuery<any[]>({
     queryKey: ['/api/wasalni'],
@@ -109,6 +111,34 @@ export default function AdminWasalniRequests() {
       toast({ title: "❌ خطأ", description: err.message, variant: "destructive" });
     },
   });
+
+  // ─── توليد سند PDF لطلب وصل لي ─────────────────────────────────────
+  const handleGenerateWasalniPDF = async (request: any) => {
+    const id = request.id || request.requestNumber;
+    setPdfLoadingIds((prev) => new Set(prev).add(id));
+    try {
+      const fee = parseFloat(request.estimatedFee || '0');
+      const description = request.itemDescription
+        || request.itemType
+        || `خدمة توصيل من "${request.fromAddress || '—'}" إلى "${request.toAddress || '—'}"`;
+      await generateOrderPDF({
+        orderNumber: request.requestNumber || request.id?.slice(0, 8),
+        date: request.createdAt || request.scheduledDate,
+        items: [{ name: description, quantity: 1, price: fee }],
+        subtotal: fee,
+        deliveryFee: 0,
+        total: fee,
+      });
+    } catch (err) {
+      console.error('PDF generation error:', err);
+    } finally {
+      setPdfLoadingIds((prev) => {
+        const s = new Set(prev);
+        s.delete(id);
+        return s;
+      });
+    }
+  };
 
   const filtered = requests.filter((r) => {
     const matchStatus = filterStatus === 'all' || r.status === filterStatus;
@@ -494,6 +524,19 @@ export default function AdminWasalniRequests() {
                     rows={2}
                   />
                 </div>
+
+                {/* ── زر السند الإلكتروني ── */}
+                <Button
+                  variant="outline"
+                  onClick={() => handleGenerateWasalniPDF(selectedRequest)}
+                  disabled={pdfLoadingIds.has(selectedRequest?.id || selectedRequest?.requestNumber)}
+                  className="w-full h-12 border-orange-300 text-orange-700 hover:bg-orange-50 rounded-[1.5rem] font-black gap-2"
+                >
+                  {pdfLoadingIds.has(selectedRequest?.id || selectedRequest?.requestNumber)
+                    ? <Loader2 className="h-5 w-5 animate-spin" />
+                    : <FileText className="h-5 w-5" />}
+                  طباعة السند الإلكتروني
+                </Button>
 
                 <Button 
                   onClick={() => handleUpdateStatus(selectedRequest.status)}

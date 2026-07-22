@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Package, CheckCircle, XCircle, Phone, MapPin, Filter, Navigation, Search, Truck, AlertCircle, Clock, User, Edit, DollarSign, Plus, Minus, Trash2 } from 'lucide-react';
+import { Package, CheckCircle, XCircle, Phone, MapPin, Filter, Navigation, Search, Truck, AlertCircle, Clock, User, Edit, DollarSign, Plus, Minus, Trash2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import type { Order, Driver } from '@shared/schema';
+import { generateOrderPDF } from '@/lib/generateOrderPDF';
 
 interface EditableItem {
   name: string;
@@ -36,6 +37,9 @@ export default function AdminOrders() {
   const [editedItems, setEditedItems] = useState<EditableItem[]>([]);
   const [editedDeliveryFee, setEditedDeliveryFee] = useState('');
   const [priceAdjustmentNote, setPriceAdjustmentNote] = useState('');
+
+  // حالة توليد السند PDF
+  const [pdfLoadingIds, setPdfLoadingIds] = useState<Set<string>>(new Set());
 
   const { data: orders, isLoading } = useQuery<Order[]>({
     queryKey: statusFilter !== 'all' ? ['/api/orders', statusFilter] : ['/api/orders'],
@@ -198,6 +202,36 @@ export default function AdminOrders() {
     setEditedDeliveryFee(order.deliveryFee?.toString() || '0');
     setPriceAdjustmentNote('');
     setEditPricesOrder(order);
+  };
+
+  // ─── توليد سند PDF ───────────────────────────────────────────────────
+  const handleGeneratePDF = async (order: Order) => {
+    setPdfLoadingIds((prev) => new Set(prev).add(order.id));
+    try {
+      const parsedItems = getOrderItems(order.items);
+      await generateOrderPDF({
+        orderNumber: order.orderNumber || order.id.slice(0, 8),
+        date: order.createdAt,
+        storeName: (order as any).restaurantName || undefined,
+        items: parsedItems.map((item: any) => ({
+          name: item.name || '',
+          quantity: Number(item.quantity) || 1,
+          price: parseFloat(item.price) || 0,
+        })),
+        subtotal: Number(order.subtotal) || 0,
+        deliveryFee: Number(order.deliveryFee) || 0,
+        total: Number(order.totalAmount) || 0,
+      });
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      toast({ title: 'خطأ في توليد السند', variant: 'destructive' });
+    } finally {
+      setPdfLoadingIds((prev) => {
+        const s = new Set(prev);
+        s.delete(order.id);
+        return s;
+      });
+    }
   };
 
   const calcSubtotal = () => editedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -682,6 +716,20 @@ export default function AdminOrders() {
                         >
                           <Navigation className="h-4 w-4" />
                           تتبع الموقع
+                        </Button>
+
+                        {/* ── زر السند الإلكتروني ── */}
+                        <Button
+                          variant="outline"
+                          onClick={() => handleGeneratePDF(order)}
+                          disabled={pdfLoadingIds.has(order.id)}
+                          className="gap-2 border-orange-300 text-orange-700 hover:bg-orange-50"
+                          data-testid={`button-pdf-${order.id}`}
+                        >
+                          {pdfLoadingIds.has(order.id)
+                            ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-orange-400 border-t-transparent inline-block" />
+                            : <FileText className="h-4 w-4" />}
+                          سند إلكتروني
                         </Button>
                       </div>
                     </CardContent>
