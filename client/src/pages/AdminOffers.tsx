@@ -545,155 +545,156 @@ export default function AdminOffers() {
           </DialogContent>
         </Dialog>
 
-      {/* Offers Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {isLoading ? (
-          [...Array(6)].map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <div className="w-full h-48 bg-muted" />
-              <CardContent className="p-4">
-                <div className="h-4 bg-muted rounded w-3/4 mb-2" />
-                <div className="h-3 bg-muted rounded w-1/2" />
-              </CardContent>
-            </Card>
-          ))
-        ) : offers?.length ? (
-          offers.map((offer) => (
-            <Card key={offer.id} className="hover:shadow-md transition-shadow overflow-hidden">
-              <div className="w-full h-48 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                {offer.image ? (
-                  <img 
-                    src={offer.image} 
-                    alt={offer.title}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <Percent className="h-16 w-16 text-primary/50" />
-                )}
-              </div>
-              
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg mb-2">{offer.title}</CardTitle>
-                    <p className="text-xs text-muted-foreground line-clamp-2">
-                      {offer.description}
-                    </p>
-                  </div>
-                  <Badge variant={offer.isActive ? "default" : "outline"}>
-                    {offer.isActive ? 'نشط' : 'غير نشط'}
-                  </Badge>
+        {/* Offers Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {isLoading ? (
+            [...Array(6)].map((_, i) => (
+              <Card key={i} className="animate-pulse">
+                <div className="w-full h-48 bg-muted" />
+                <CardContent className="p-4">
+                  <div className="h-4 bg-muted rounded w-3/4 mb-2" />
+                  <div className="h-3 bg-muted rounded w-1/2" />
+                </CardContent>
+              </Card>
+            ))
+          ) : offers?.length ? (
+            offers.map((offer) => (
+              <Card key={offer.id} className="hover:shadow-md transition-shadow overflow-hidden">
+                <div className="w-full h-48 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                  {offer.image ? (
+                    <img 
+                      src={offer.image} 
+                      alt={offer.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Percent className="h-16 w-16 text-primary/50" />
+                  )}
                 </div>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                {/* Linked Restaurant Badge */}
-                {offer.restaurantId && (
-                  <div className="flex items-center gap-1.5 bg-primary/10 border border-primary/20 rounded-lg px-3 py-1.5">
-                    <Store className="h-4 w-4 text-primary flex-shrink-0" />
-                    <span className="text-sm font-semibold text-primary">
-                      {restaurants.find(r => r.id === offer.restaurantId)?.name || 'مطعم مرتبط'}
-                    </span>
-                  </div>
-                )}
-                {!offer.restaurantId && (
-                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
-                    <Store className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    <span className="text-sm text-gray-400">عرض عام لكل المتاجر</span>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  {offer.discountPercent && (
-                    <div className="flex items-center gap-1">
-                      <Percent className="h-4 w-4 text-green-500" />
-                      <span>{offer.discountPercent}% خصم</span>
+                
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardTitle className="text-lg mb-2">{offer.title}</CardTitle>
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {offer.description}
+                      </p>
                     </div>
-                  )}
-                  {offer.discountAmount && (
-                    <div className="flex items-center gap-1">
-                      <DollarSign className="h-4 w-4 text-green-500" />
-                      <span>{parseDecimal(offer.discountAmount)} ريال خصم</span>
-                    </div>
-                  )}
-                  <div className="text-xs text-muted-foreground">
-                    أقل طلب: {parseDecimal(offer.minimumOrder)} ريال
+                    <Badge variant={offer.isActive ? "default" : "outline"}>
+                      {offer.isActive ? 'نشط' : 'غير نشط'}
+                    </Badge>
                   </div>
-                  {offer.validUntil && (
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-xs">
-                        {new Date(offer.validUntil).toLocaleDateString('ar-YE')}
+                </CardHeader>
+                
+                <CardContent className="space-y-4">
+                  {/* Linked Restaurant Badge */}
+                  {offer.restaurantId && (
+                    <div className="flex items-center gap-1.5 bg-primary/10 border border-primary/20 rounded-lg px-3 py-1.5">
+                      <Store className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span className="text-sm font-semibold text-primary">
+                        {restaurants.find(r => r.id === offer.restaurantId)?.name || 'مطعم مرتبط'}
                       </span>
                     </div>
                   )}
-                </div>
+                  {!offer.restaurantId && (
+                    <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+                      <Store className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                      <span className="text-sm text-gray-400">عرض عام لكل المتاجر</span>
+                    </div>
+                  )}
 
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">نشط</p>
-                  <Switch
-                    checked={offer.isActive}
-                    onCheckedChange={() => toggleOfferStatus(offer)}
-                    data-testid={`switch-offer-active-${offer.id}`}
-                  />
-                </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {offer.discountPercent && (
+                      <div className="flex items-center gap-1">
+                        <Percent className="h-4 w-4 text-green-500" />
+                        <span>{offer.discountPercent}% خصم</span>
+                      </div>
+                    )}
+                    {offer.discountAmount && (
+                      <div className="flex items-center gap-1">
+                        <DollarSign className="h-4 w-4 text-green-500" />
+                        <span>{parseDecimal(offer.discountAmount)} ريال خصم</span>
+                      </div>
+                    )}
+                    <div className="text-xs text-muted-foreground">
+                      أقل طلب: {parseDecimal(offer.minimumOrder)} ريال
+                    </div>
+                    {offer.validUntil && (
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs">
+                          {new Date(offer.validUntil).toLocaleDateString('ar-YE')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
 
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 gap-2"
-                    onClick={() => handleEdit(offer)}
-                    data-testid={`button-edit-offer-${offer.id}`}
-                  >
-                    <Edit className="h-4 w-4" />
-                    تعديل
-                  </Button>
-                  
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        data-testid={`button-delete-offer-${offer.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          هل أنت متأكد من حذف العرض "{offer.title}"؟ 
-                          لن يتمكن العملاء من رؤية هذا العرض بعد الحذف.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => deleteOfferMutation.mutate(offer.id)}
-                          className="bg-destructive hover:bg-destructive/90"
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">نشط</p>
+                    <Switch
+                      checked={offer.isActive}
+                      onCheckedChange={() => toggleOfferStatus(offer)}
+                      data-testid={`switch-offer-active-${offer.id}`}
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 gap-2"
+                      onClick={() => handleEdit(offer)}
+                      data-testid={`button-edit-offer-${offer.id}`}
+                    >
+                      <Edit className="h-4 w-4" />
+                      تعديل
+                    </Button>
+                    
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          data-testid={`button-delete-offer-${offer.id}`}
                         >
-                          حذف
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        ) : (
-          <div className="col-span-full text-center py-12">
-            <Percent className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">لا توجد عروض</h3>
-            <p className="text-muted-foreground mb-4">ابدأ بإضافة عروض خاصة لجذب العملاء</p>
-            <Button onClick={() => setIsDialogOpen(true)} data-testid="button-add-first-offer">
-              إضافة العرض الأول
-            </Button>
-          </div>
-        )}
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            هل أنت متأكد من حذف العرض "{offer.title}"؟ 
+                            لن يتمكن العملاء من رؤية هذا العرض بعد الحذف.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => deleteOfferMutation.mutate(offer.id)}
+                            className="bg-destructive hover:bg-destructive/90"
+                          >
+                            حذف
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            <div className="col-span-full text-center py-12">
+              <Percent className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">لا توجد عروض</h3>
+              <p className="text-muted-foreground mb-4">ابدأ بإضافة عروض خاصة لجذب العملاء</p>
+              <Button onClick={() => setIsDialogOpen(true)} data-testid="button-add-first-offer">
+                إضافة العرض الأول
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
