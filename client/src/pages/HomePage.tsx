@@ -14,7 +14,6 @@ import {
   Navigation,
   AlertCircle,
 } from 'lucide-react';
-import TimingBanner from '@/components/TimingBanner';
 import { Badge } from '@/components/ui/badge';
 import { useUiSettings } from '@/context/UiSettingsContext';
 import { useUserLocation } from '@/context/LocationContext';
@@ -160,8 +159,6 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* Timing Banner */}
-      {showSection('show_hero_section') && <TimingBanner />}
 
       {/* ── Categories ─────────────────────────────────────────────────────── */}
       {showSection('show_categories') && (
