@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Minus, Plus, Trash2, ShoppingBag, X, MapPin, Loader2, Calendar, Clock, AlertTriangle, Tag, CheckCircle } from 'lucide-react'; 
 import { useCart } from '../context/CartContext';
 import { useUserLocation as useGeoLocation } from '../context/LocationContext';
@@ -72,13 +72,6 @@ export function Cart({ isOpen, onClose }: CartProps) {
     ];
   };
 
-  const paymentMethods = [
-    { id: 'cash', name: 'نقداً عند الاستلام', icon: '💵' },
-    { id: 'card', name: 'بطاقة دفع', icon: '💳' },
-    { id: 'wallet', name: 'المحفظة', icon: '👛' },
-    { id: 'online', name: 'دفع إلكتروني', icon: '🌐' }
-  ];
-
   // طلب الموقع تلقائياً عند فتح السلة
   useEffect(() => {
     if (isOpen && !userGeoLocation.position && !userGeoLocation.isLoading && !userGeoLocation.error) {
@@ -107,6 +100,54 @@ export function Cart({ isOpen, onClose }: CartProps) {
   const getSetting = (key: string, def = '') => 
     uiSettings?.find((s: any) => s.key === key)?.value || def;
 
+  // طرق الدفع من الإدمن (ديناميكية)
+  const { data: adminPaymentMethods = [] } = useQuery<any[]>({
+    queryKey: ['/api/payment-methods'],
+  });
+
+  const showCashPayment = getSetting('show_cash_payment', 'true') !== 'false';
+  const showPaymentCards = getSetting('show_payment_cards', 'true') !== 'false';
+  const showBankTransfer = getSetting('show_bank_transfer', 'false') === 'true';
+  const scheduledOrdersEnabled = getSetting('enable_scheduled_orders', 'true') !== 'false';
+  const showCouponBoxAlways = getSetting('show_coupon_box_always', 'true') !== 'false';
+  const couponMinOrderValue = parseFloat(getSetting('coupon_min_order_value', '0') || '0');
+  const showCouponBox = showCouponBoxAlways || (couponMinOrderValue > 0 && state.subtotal >= couponMinOrderValue);
+
+  const paymentMethods = useMemo(() => {
+    const methods: { id: string; name: string; icon: string }[] = [];
+    if (showCashPayment) {
+      methods.push({ id: 'cash', name: 'نقداً عند الاستلام', icon: '💵' });
+    }
+    if (showPaymentCards) {
+      if ((adminPaymentMethods as any[]).length > 0) {
+        const iconMap: Record<string, string> = {
+          mada: '🏦', stc_pay: '📱', apple_pay: '🍎',
+          visa: '💳', mastercard: '💳', tabby: '📊',
+          tamara: '📈', wallet: '👛', online: '🌐', card: '💳',
+        };
+        (adminPaymentMethods as any[])
+          .filter((m: any) => m.isActive && m.type !== 'cash' && m.type !== 'bank_transfer')
+          .forEach((m: any) => {
+            methods.push({
+              id: m.provider || m.type,
+              name: m.name || m.provider,
+              icon: iconMap[m.provider] || '💳',
+            });
+          });
+      } else {
+        methods.push({ id: 'card', name: 'بطاقة دفع', icon: '💳' });
+        methods.push({ id: 'wallet', name: 'المحفظة', icon: '👛' });
+        methods.push({ id: 'online', name: 'دفع إلكتروني', icon: '🌐' });
+      }
+    }
+    if (showBankTransfer) {
+      methods.push({ id: 'bank_transfer', name: 'تحويل بنكي', icon: '🏛️' });
+    }
+    return methods.length > 0
+      ? methods
+      : [{ id: 'cash', name: 'نقداً عند الاستلام', icon: '💵' }];
+  }, [adminPaymentMethods, showCashPayment, showPaymentCards, showBankTransfer, uiSettings]);
+
   const openingTime = getSetting('opening_time', '08:00');
   const closingTime = getSetting('closing_time', '23:00');
   const storeStatus = getSetting('store_status', 'open');
@@ -120,14 +161,14 @@ export function Cart({ isOpen, onClose }: CartProps) {
     enabled: !!uiSettings
   });
 
-  // التحقق من حالة التطبيق عند فتح السلة
+  // التحقق من حالة التطبيق عند فتح السلة - يعرض نافذة الجدولة إذا كان التطبيق مغلقاً والجدولة مفعّلة
   useEffect(() => {
-    if (isOpen && appStatus && !appStatus.isOpen && !showScheduleDialog) {
+    if (isOpen && appStatus && !appStatus.isOpen && !showScheduleDialog && scheduledOrdersEnabled) {
       setScheduleDialogTitle('التطبيق مغلق حالياً');
       setScheduleDialogMessage(appStatus.message || `التطبيق مغلق حالياً. يفتح في تمام الساعة ${openingTime}. هل تريد جدولة طلبك لوقت الافتتاح؟`);
       setShowScheduleDialog(true);
     }
-  }, [isOpen, appStatus]);
+  }, [isOpen, appStatus, scheduledOrdersEnabled]);
 
   // بيانات المطعم لموقعه
   const { data: restaurant } = useQuery({
@@ -703,26 +744,97 @@ export function Cart({ isOpen, onClose }: CartProps) {
                     )}
                   </div>
 
-                  {/* طرق الدفع */}
-                  <div>
-                    <h3 className="font-medium mb-2 text-sm">طريقة الدفع *</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {paymentMethods.map((method) => (
-                        <button
-                          key={method.id}
-                          onClick={() => setCustomerInfo({...customerInfo, paymentMethod: method.id})}
-                          className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all duration-300 ${
-                            customerInfo.paymentMethod === method.id 
-                              ? 'border-red-500 bg-red-50 text-red-700 shadow-sm' 
-                              : 'border-gray-100 hover:border-gray-300 hover:bg-gray-50'
-                          }`}
-                        >
-                          <span className="text-xl">{method.icon}</span>
-                          <span className="text-[10px] font-black">{method.name}</span>
-                        </button>
-                      ))}
+                  {/* طرق الدفع - ديناميكية من لوحة التحكم */}
+                  {paymentMethods.length > 0 && (
+                    <div>
+                      <h3 className="font-medium mb-2 text-sm">طريقة الدفع *</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {paymentMethods.map((method) => (
+                          <button
+                            key={method.id}
+                            onClick={() => setCustomerInfo({...customerInfo, paymentMethod: method.id})}
+                            className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all duration-300 ${
+                              customerInfo.paymentMethod === method.id 
+                                ? 'border-red-500 bg-red-50 text-red-700 shadow-sm' 
+                                : 'border-gray-100 hover:border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className="text-xl">{method.icon}</span>
+                            <span className="text-[10px] font-black">{method.name}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* كوبون الخصم - يظهر حسب إعدادات لوحة التحكم */}
+                  {showCouponBox && (
+                    <div className="border rounded-xl p-3 bg-gray-50 space-y-2">
+                      <h3 className="font-medium text-sm flex items-center gap-1.5">
+                        <Tag className="h-4 w-4 text-orange-500" />
+                        كود الخصم
+                      </h3>
+                      {couponResult?.valid ? (
+                        <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <div>
+                              <p className="text-sm font-bold text-green-700">{couponCode}</p>
+                              <p className="text-xs text-green-600">وفّرت {formatCurrency(couponResult.discount || 0)}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => { setCouponCode(''); setCouponResult(null); }}
+                            className="text-red-400 hover:text-red-600 text-xs font-bold"
+                          >
+                            إزالة
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={couponCode}
+                              onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponResult(null); }}
+                              placeholder="أدخل كود الخصم"
+                              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:border-orange-400"
+                              dir="ltr"
+                              onKeyDown={(e) => e.key === 'Enter' && handleValidateCoupon()}
+                            />
+                            <button
+                              onClick={handleValidateCoupon}
+                              disabled={isCouponValidating || !couponCode.trim()}
+                              className="px-3 py-2 bg-orange-500 text-white rounded-lg text-sm font-bold hover:bg-orange-600 disabled:opacity-50 flex items-center gap-1"
+                            >
+                              {isCouponValidating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'تطبيق'}
+                            </button>
+                          </div>
+                          {couponResult && !couponResult.valid && (
+                            <p className="text-xs text-red-500">{couponResult.message}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* إجمالي مع الخصم */}
+                  {couponResult?.valid && (couponResult.discount || 0) > 0 && (
+                    <div className="border-t pt-2 space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">المجموع</span>
+                        <span>{formatCurrency(state.subtotal + deliveryFee)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-green-600 font-bold">
+                        <span>خصم الكوبون</span>
+                        <span>- {formatCurrency(couponResult.discount || 0)}</span>
+                      </div>
+                      <div className="flex justify-between font-black text-base">
+                        <span>الإجمالي</span>
+                        <span className="text-red-600">{formatCurrency(Math.max(0, state.subtotal + deliveryFee - (couponResult.discount || 0)))}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* أزرار الإجراء */}
                   <div className="flex flex-col gap-3 pt-4 border-t mt-4">

@@ -103,7 +103,7 @@ const WorkingHoursIndicator: React.FC = () => {
               : 'bg-red-400/20 text-red-300 border border-red-400/30'
           }`}
         >
-          {isOpen ? 'OPEN' : 'CLOSED'}
+          {isOpen ? 'مفتوح' : 'مغلق'}
         </span>
       </div>
     </div>

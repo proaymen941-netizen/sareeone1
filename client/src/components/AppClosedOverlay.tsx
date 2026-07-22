@@ -94,7 +94,7 @@ export default function AppClosedOverlay({
 
             <div className="p-5 space-y-4">
               <p className="text-xs text-gray-500 text-center">
-                سيُرسل طلبك إلى لوحة التحكم قبل 30 دقيقة من موعدك
+                سيُرسل طلبك إلى لوحة التحكم قبل 15 دقيقة من موعدك
               </p>
 
               {/* Opening time note */}
