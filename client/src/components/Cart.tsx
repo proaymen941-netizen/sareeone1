@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Minus, Plus, Trash2, ShoppingBag, X, MapPin, Loader2, Calendar, Clock, AlertTriangle } from 'lucide-react'; 
+import { Minus, Plus, Trash2, ShoppingBag, X, MapPin, Loader2, Calendar, Clock, AlertTriangle, Tag, CheckCircle } from 'lucide-react'; 
 import { useCart } from '../context/CartContext';
 import { useUserLocation as useGeoLocation } from '../context/LocationContext';
 import { GoogleMapsLocationPicker, LocationData } from './GoogleMapsLocationPicker';
@@ -42,6 +42,22 @@ export function Cart({ isOpen, onClose }: CartProps) {
   // حالة تأكيد الإرسال المكرر
   const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false);
   const [pendingOrderData, setPendingOrderData] = useState<any>(null);
+
+  // ─── نظام الكوبون ───────────────────────────────────────────────────
+  const [couponCode, setCouponCode] = useState('');
+  const [couponResult, setCouponResult] = useState<{
+    valid: boolean;
+    discount?: number;
+    message?: string;
+    couponId?: string;
+  } | null>(null);
+  const [isCouponValidating, setIsCouponValidating] = useState(false);
+
+  // إعادة تعيين الكوبون عند تغيير محتوى السلة
+  useEffect(() => {
+    setCouponResult(null);
+    setCouponCode('');
+  }, [state.restaurantId]);
 
   const getScheduleSlots = () => {
     const tomorrow = new Date();
@@ -182,6 +198,34 @@ export function Cart({ isOpen, onClose }: CartProps) {
     return undefined;
   };
 
+  // ─── التحقق من الكوبون ──────────────────────────────────────────────
+  const handleValidateCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setIsCouponValidating(true);
+    try {
+      const res = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: couponCode.trim().toUpperCase(),
+          orderValue: state.subtotal,
+        }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setCouponResult({ valid: true, discount: data.discount || 0, couponId: data.coupon?.id });
+      } else {
+        setCouponResult({ valid: false, message: data.message || 'كود الكوبون غير صحيح' });
+      }
+    } catch {
+      setCouponResult({ valid: false, message: 'تعذر التحقق من الكوبون، حاول مرة أخرى' });
+    } finally {
+      setIsCouponValidating(false);
+    }
+  };
+
+  const appliedDiscount = couponResult?.valid ? couponResult.discount || 0 : 0;
+
   if (!isOpen) return null;
 
   const saveCustomerInfoToProfile = async () => {
@@ -204,13 +248,20 @@ export function Cart({ isOpen, onClose }: CartProps) {
     deliveryAddress: selectedLocation?.address || '',
     customerLocationLat: selectedLocation?.lat,
     customerLocationLng: selectedLocation?.lng,
-    notes: customerInfo.notes,
+    notes: [
+      customerInfo.notes,
+      couponResult?.valid && couponCode ? `كوبون: ${couponCode} (خصم: ${appliedDiscount})` : ''
+    ].filter(Boolean).join(' | ') || undefined,
     paymentMethod: customerInfo.paymentMethod,
     items: JSON.stringify(state.items),
     subtotal: state.subtotal,
     deliveryFee: deliveryFee,
-    totalAmount: state.subtotal + deliveryFee,
+    totalAmount: Math.max(0, state.subtotal + deliveryFee - appliedDiscount),
+    total: Math.max(0, state.subtotal + deliveryFee - appliedDiscount),
     restaurantId: state.restaurantId,
+    // حقول الكوبون (تُرسل للخادم لتسجيل الاستخدام)
+    couponCode: couponResult?.valid ? couponCode.trim().toUpperCase() : undefined,
+    couponDiscount: appliedDiscount > 0 ? appliedDiscount : undefined,
     deliveryPreference: scheduled ? 'scheduled' : 'now',
     scheduledDate: scheduled?.date || null,
     scheduledTimeSlot: scheduled?.time || null,

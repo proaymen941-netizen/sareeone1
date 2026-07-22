@@ -43,10 +43,8 @@ import {
   UserCog,
   Clock,
   Layers,
-  Zap,
   Activity,
   Bike,
-  Map,
 } from 'lucide-react';
 import type { UiSettings } from '@shared/schema';
 
@@ -455,7 +453,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { icon: Tag, label: 'التصنيفات', path: '/admin/categories', permission: 'manage_categories' },
         { icon: Package, label: 'المنتجات', path: '/admin/menu-items', permission: 'manage_menu' },
         { icon: Percent, label: 'العروض الخاصة', path: '/admin/special-offers', permission: 'manage_menu' },
-        { icon: Zap, label: 'العروض المميزة', path: '/admin/offers', permission: 'manage_menu' },
         { icon: Ticket, label: 'الكوبونات', path: '/admin/coupons', permission: 'manage_coupons' },
         { icon: CreditCard, label: 'طرق الدفع', path: '/admin/payment-methods', permission: 'manage_settings' },
       ].filter(item => hasPermission(item.permission))
@@ -465,7 +462,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       label: 'السائقون',
       items: [
         { icon: Truck, label: 'إدارة السائقين', path: '/admin/drivers', permission: 'manage_drivers' },
-        { icon: Map, label: 'تتبع السائقين المباشر', path: '/admin/driver-tracking', permission: 'manage_drivers' },
         { icon: DollarSign, label: 'رسوم التوصيل', path: '/admin/delivery-fees', permission: 'manage_drivers' },
         { icon: Wallet, label: 'محافظ السائقين', path: '/admin/wallet', permission: 'manage_drivers' },
       ].filter(item => hasPermission(item.permission))
