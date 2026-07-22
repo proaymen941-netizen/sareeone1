@@ -22,6 +22,8 @@ import type { SpecialOffer, Restaurant } from '@shared/schema';
 
 type DiscountType = 'percent' | 'amount' | 'none';
 type SectionMode = 'auto' | 'existing';
+type OfferType = 'discount' | 'bundle';
+type DiscountScope = 'store' | 'section' | 'category';
 
 export function AdminSpecialOffers() {
   const [, setLocation] = useLocation();
@@ -34,9 +36,12 @@ export function AdminSpecialOffers() {
     title: '',
     description: '',
     image: '',
+    offerType: 'discount' as OfferType,
     discountType: 'percent' as DiscountType,
     discountPercent: '',
     discountAmount: '',
+    discountScope: 'store' as DiscountScope,
+    bundlePrice: '',
     minimumOrder: '',
     validUntil: '',
     showBadge: true,
@@ -148,9 +153,12 @@ export function AdminSpecialOffers() {
       title: '',
       description: '',
       image: '',
+      offerType: 'discount',
       discountType: 'percent',
       discountPercent: '',
       discountAmount: '',
+      discountScope: 'store',
+      bundlePrice: '',
       minimumOrder: '',
       validUntil: '',
       showBadge: true,
@@ -170,7 +178,11 @@ export function AdminSpecialOffers() {
       toast({ title: 'يرجى اختيار المتجر', variant: 'destructive' });
       return;
     }
-    if (formData.sectionMode === 'existing' && !formData.sectionId) {
+    if (formData.offerType === 'bundle' && !formData.bundlePrice) {
+      toast({ title: 'يرجى إدخال سعر المجموعة', variant: 'destructive' });
+      return;
+    }
+    if (formData.offerType === 'discount' && formData.discountScope !== 'store' && formData.sectionMode === 'existing' && !formData.sectionId) {
       toast({ title: 'يرجى اختيار قسم موجود من قائمة المتجر', variant: 'destructive' });
       return;
     }
@@ -179,14 +191,21 @@ export function AdminSpecialOffers() {
       title: formData.title,
       description: formData.description,
       image: formData.image || 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg',
+      offerType: formData.offerType,
+      // حقول الخصم (للعروض من نوع discount فقط)
       discountPercent:
-        formData.discountType === 'percent' && formData.discountPercent
+        formData.offerType === 'discount' && formData.discountType === 'percent' && formData.discountPercent
           ? parseInt(formData.discountPercent)
           : null,
       discountAmount:
-        formData.discountType === 'amount' && formData.discountAmount
+        formData.offerType === 'discount' && formData.discountType === 'amount' && formData.discountAmount
           ? parseFloat(formData.discountAmount)
           : null,
+      discountScope: formData.offerType === 'discount' ? formData.discountScope : null,
+      // حقول المجموعة (للعروض من نوع bundle فقط)
+      bundlePrice: formData.offerType === 'bundle' && formData.bundlePrice
+        ? parseFloat(formData.bundlePrice)
+        : null,
       minimumOrder: formData.minimumOrder ? parseFloat(formData.minimumOrder) : 0,
       validUntil: formData.validUntil ? new Date(formData.validUntil) : null,
       showBadge: formData.showBadge,
@@ -195,7 +214,7 @@ export function AdminSpecialOffers() {
       isActive: formData.isActive,
       restaurantId: formData.restaurantId,
       sectionId: formData.sectionMode === 'existing' ? formData.sectionId : null,
-      autoCreateOffersSection: formData.sectionMode === 'auto',
+      autoCreateOffersSection: formData.offerType === 'bundle' || formData.sectionMode === 'auto',
     };
 
     if (editingOffer) {
@@ -207,6 +226,7 @@ export function AdminSpecialOffers() {
 
   const startEdit = (offer: SpecialOffer & { sectionId?: string | null }) => {
     setEditingOffer(offer);
+    const offerType: OfferType = (offer as any).offerType === 'bundle' ? 'bundle' : 'discount';
     const discountType: DiscountType = offer.discountPercent
       ? 'percent'
       : offer.discountAmount
@@ -216,9 +236,12 @@ export function AdminSpecialOffers() {
       title: offer.title,
       description: offer.description || '',
       image: offer.image || '',
+      offerType,
       discountType,
       discountPercent: offer.discountPercent?.toString() || '',
       discountAmount: offer.discountAmount?.toString() || '',
+      discountScope: ((offer as any).discountScope as DiscountScope) || 'store',
+      bundlePrice: (offer as any).bundlePrice?.toString() || '',
       minimumOrder: offer.minimumOrder?.toString() || '',
       validUntil: offer.validUntil ? new Date(offer.validUntil).toISOString().slice(0, 16) : '',
       showBadge: offer.showBadge ?? true,
@@ -300,10 +323,34 @@ export function AdminSpecialOffers() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* نوع العرض الرئيسي */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border p-4 rounded-lg bg-blue-50/30">
+                <div className="md:col-span-2">
+                  <Label className="text-base font-bold">نوع العرض *</Label>
+                  <Select
+                    value={formData.offerType}
+                    onValueChange={(v: OfferType) => setFormData({ ...formData, offerType: v })}
+                  >
+                    <SelectTrigger data-testid="select-offer-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="discount">🏷️ خصم — نسبة مئوية أو مبلغ محدد على قسم أو المتجر كله</SelectItem>
+                      <SelectItem value="bundle">🎁 مجموعة — مجموعة من المنتجات بسعر محدد</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formData.offerType === 'bundle'
+                      ? 'سيظهر هذا العرض كمنتج قابل للإضافة في السلة بالسعر المحدد'
+                      : 'سيتم تطبيق الخصم تلقائياً على طلب العميل من هذا المتجر'}
+                  </p>
+                </div>
+              </div>
+
               {/* اختيار المتجر والقسم */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border p-4 rounded-lg bg-muted/20">
                 <div>
-                  <Label>المتجر *</Label>
+                  <Label>المتجر * <span className="text-xs text-muted-foreground">(سيتم التوجه إليه عند الضغط على "تسوق الآن")</span></Label>
                   <Select
                     value={formData.restaurantId}
                     onValueChange={(v) => setFormData({ ...formData, restaurantId: v })}
@@ -322,7 +369,7 @@ export function AdminSpecialOffers() {
                 </div>
 
                 <div>
-                  <Label>قسم المتجر *</Label>
+                  <Label>قسم العرض داخل المتجر</Label>
                   <Select
                     value={formData.sectionMode}
                     onValueChange={(v: SectionMode) => setFormData({ ...formData, sectionMode: v })}
@@ -375,7 +422,7 @@ export function AdminSpecialOffers() {
                     id="title"
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    placeholder="مثال: خصم 20% على جميع الطلبات"
+                    placeholder={formData.offerType === 'bundle' ? 'مثال: مجموعة العائلة الكاملة' : 'مثال: خصم 20% على جميع الطلبات'}
                     required
                     data-testid="input-title"
                   />
@@ -399,87 +446,146 @@ export function AdminSpecialOffers() {
                   id="description"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="وصف تفصيلي للعرض"
+                  placeholder={formData.offerType === 'bundle' ? 'صف محتويات المجموعة بالتفصيل' : 'وصف تفصيلي للعرض'}
                   rows={3}
                 />
               </div>
 
-              {/* نوع الخصم */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label>نوع الخصم</Label>
-                  <Select
-                    value={formData.discountType}
-                    onValueChange={(v: DiscountType) =>
-                      setFormData({
-                        ...formData,
-                        discountType: v,
-                        discountPercent: v === 'percent' ? formData.discountPercent : '',
-                        discountAmount: v === 'amount' ? formData.discountAmount : '',
-                      })
-                    }
-                  >
-                    <SelectTrigger data-testid="select-discount-type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="percent">نسبة مئوية (%)</SelectItem>
-                      <SelectItem value="amount">مبلغ محدد (ريال)</SelectItem>
-                      <SelectItem value="none">بدون خصم (عرض ترويجي)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {formData.discountType === 'percent' && (
-                  <div>
-                    <Label htmlFor="discountPercent">نسبة الخصم (%)</Label>
-                    <Input
-                      id="discountPercent"
-                      type="number"
-                      step="1"
-                      min="0"
-                      max="100"
-                      value={formData.discountPercent}
-                      onChange={(e) =>
-                        setFormData({ ...formData, discountPercent: e.target.value })
-                      }
-                      placeholder="20"
-                      data-testid="input-discount-percent"
-                    />
+              {/* إعدادات العرض حسب النوع */}
+              {formData.offerType === 'bundle' ? (
+                /* إعدادات المجموعة */
+                <div className="border p-4 rounded-lg bg-green-50/30 space-y-3">
+                  <h4 className="font-bold text-sm text-green-700">🎁 إعدادات المجموعة</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="bundlePrice">سعر المجموعة (ريال) *</Label>
+                      <Input
+                        id="bundlePrice"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.bundlePrice}
+                        onChange={(e) => setFormData({ ...formData, bundlePrice: e.target.value })}
+                        placeholder="99.99"
+                        required
+                        data-testid="input-bundle-price"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">السعر الذي سيضاف للسلة عند اختيار هذه المجموعة</p>
+                    </div>
+                    <div>
+                      <Label htmlFor="minimumOrder">الحد الأدنى للطلب (ريال) — اختياري</Label>
+                      <Input
+                        id="minimumOrder"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.minimumOrder}
+                        onChange={(e) => setFormData({ ...formData, minimumOrder: e.target.value })}
+                        placeholder="0"
+                      />
+                    </div>
                   </div>
-                )}
-
-                {formData.discountType === 'amount' && (
-                  <div>
-                    <Label htmlFor="discountAmount">مبلغ الخصم (ريال)</Label>
-                    <Input
-                      id="discountAmount"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.discountAmount}
-                      onChange={(e) =>
-                        setFormData({ ...formData, discountAmount: e.target.value })
-                      }
-                      placeholder="50"
-                      data-testid="input-discount-amount"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <Label htmlFor="minimumOrder">الحد الأدنى للطلب (ريال)</Label>
-                  <Input
-                    id="minimumOrder"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.minimumOrder}
-                    onChange={(e) => setFormData({ ...formData, minimumOrder: e.target.value })}
-                    placeholder="100"
-                  />
                 </div>
-              </div>
+              ) : (
+                /* إعدادات الخصم */
+                <div className="border p-4 rounded-lg bg-orange-50/30 space-y-3">
+                  <h4 className="font-bold text-sm text-orange-700">🏷️ إعدادات الخصم</h4>
+
+                  {/* نطاق تطبيق الخصم */}
+                  <div>
+                    <Label>نطاق تطبيق الخصم *</Label>
+                    <Select
+                      value={formData.discountScope}
+                      onValueChange={(v: DiscountScope) => setFormData({ ...formData, discountScope: v })}
+                    >
+                      <SelectTrigger data-testid="select-discount-scope">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="store">🏪 المتجر بالكامل — يُخصم على كامل طلب العميل</SelectItem>
+                        <SelectItem value="section">📂 قسم محدد في المتجر — يُخصم على المنتجات من القسم فقط</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* نوع الخصم والقيمة */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label>نوع الخصم</Label>
+                      <Select
+                        value={formData.discountType}
+                        onValueChange={(v: DiscountType) =>
+                          setFormData({
+                            ...formData,
+                            discountType: v,
+                            discountPercent: v === 'percent' ? formData.discountPercent : '',
+                            discountAmount: v === 'amount' ? formData.discountAmount : '',
+                          })
+                        }
+                      >
+                        <SelectTrigger data-testid="select-discount-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="percent">نسبة مئوية (%)</SelectItem>
+                          <SelectItem value="amount">مبلغ محدد (ريال)</SelectItem>
+                          <SelectItem value="none">بدون خصم (عرض ترويجي)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {formData.discountType === 'percent' && (
+                      <div>
+                        <Label htmlFor="discountPercent">نسبة الخصم (%)</Label>
+                        <Input
+                          id="discountPercent"
+                          type="number"
+                          step="1"
+                          min="0"
+                          max="100"
+                          value={formData.discountPercent}
+                          onChange={(e) =>
+                            setFormData({ ...formData, discountPercent: e.target.value })
+                          }
+                          placeholder="20"
+                          data-testid="input-discount-percent"
+                        />
+                      </div>
+                    )}
+
+                    {formData.discountType === 'amount' && (
+                      <div>
+                        <Label htmlFor="discountAmount">مبلغ الخصم (ريال)</Label>
+                        <Input
+                          id="discountAmount"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={formData.discountAmount}
+                          onChange={(e) =>
+                            setFormData({ ...formData, discountAmount: e.target.value })
+                          }
+                          placeholder="50"
+                          data-testid="input-discount-amount"
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <Label htmlFor="minimumOrder">الحد الأدنى للطلب (ريال)</Label>
+                      <Input
+                        id="minimumOrder"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.minimumOrder}
+                        onChange={(e) => setFormData({ ...formData, minimumOrder: e.target.value })}
+                        placeholder="100"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <Label htmlFor="validUntil">تاريخ الانتهاء (اختياري)</Label>
@@ -567,6 +673,7 @@ export function AdminSpecialOffers() {
         ) : (
           offers?.map((offer) => {
             const status = getOfferStatus(offer);
+            const isBundle = (offer as any).offerType === 'bundle';
 
             return (
               <Card key={offer.id}>
@@ -576,10 +683,18 @@ export function AdminSpecialOffers() {
                       <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <h3 className="font-semibold text-lg">{offer.title}</h3>
                         <Badge className={status.color}>{status.text}</Badge>
-                        <Badge variant="outline" className="gap-1">
-                          <Percent className="h-3 w-3" />
-                          {getDiscountText(offer)}
+                        <Badge variant={isBundle ? 'default' : 'outline'} className="gap-1">
+                          {isBundle ? (
+                            <>🎁 مجموعة — {(offer as any).bundlePrice} ريال</>
+                          ) : (
+                            <><Percent className="h-3 w-3" />{getDiscountText(offer)}</>
+                          )}
                         </Badge>
+                        {!isBundle && (offer as any).discountScope && (
+                          <Badge variant="outline" className="text-xs">
+                            {(offer as any).discountScope === 'store' ? '🏪 كامل المتجر' : '📂 قسم محدد'}
+                          </Badge>
+                        )}
                         <Badge variant="secondary">{getRestaurantName(offer.restaurantId)}</Badge>
                       </div>
 
@@ -594,8 +709,14 @@ export function AdminSpecialOffers() {
                         </div>
 
                         <div>
-                          <p className="font-medium text-muted-foreground">الحد الأدنى للطلب</p>
-                          <p>{offer.minimumOrder ? `${offer.minimumOrder} ريال` : 'بدون حد أدنى'}</p>
+                          <p className="font-medium text-muted-foreground">
+                            {isBundle ? 'سعر المجموعة' : 'الحد الأدنى للطلب'}
+                          </p>
+                          <p>
+                            {isBundle
+                              ? `${(offer as any).bundlePrice} ريال`
+                              : offer.minimumOrder ? `${offer.minimumOrder} ريال` : 'بدون حد أدنى'}
+                          </p>
                         </div>
 
                         <div>

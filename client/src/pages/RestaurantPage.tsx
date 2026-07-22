@@ -179,6 +179,18 @@ export default function RestaurantPage() {
     enabled: !!id,
   });
 
+  // عروض المجموعة الخاصة بهذا المتجر (bundle offers)
+  const { data: bundleOffers = [] } = useQuery<any[]>({
+    queryKey: ['/api/special-offers/restaurant', id],
+    queryFn: async () => {
+      const res = await fetch(`/api/special-offers?restaurantId=${id}&offerType=bundle`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.filter((o: any) => o.offerType === 'bundle' && o.isActive);
+    },
+    enabled: !!id,
+  });
+
   const menuCategories = Array.from(new Set(menuItems.map(i => i.category).filter(Boolean)));
   const hasSections = sections.length > 0;
 
@@ -389,9 +401,108 @@ export default function RestaurantPage() {
         </div>
       )}
 
+      {/* ── Bundle Offers Section ── (تظهر فقط عند اختيار "الكل" أو قسم "العروض") */}
+      {bundleOffers.length > 0 && (selectedSection === 'all' || displaySections.find(s => s.id === selectedSection)?.name === 'العروض') && (
+        <div className="px-3 pt-4">
+          <h2 className="text-sm font-black text-gray-800 mb-2 flex items-center gap-1">
+            🎁 <span>عروض خاصة</span>
+          </h2>
+          <div className="space-y-3">
+            {bundleOffers.map(offer => {
+              const bundleItemId = `bundle_${offer.id}`;
+              const qty = getItemQuantity(bundleItemId);
+              return (
+                <div key={offer.id} className="bg-gradient-to-l from-primary/5 to-orange-50 rounded-2xl border border-primary/20 shadow-sm overflow-hidden flex">
+                  {/* صورة العرض */}
+                  <div className="flex-shrink-0 w-28 h-28 relative">
+                    {offer.image ? (
+                      <img src={offer.image} alt={offer.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-primary/10 flex items-center justify-center">
+                        <span className="text-3xl">🎁</span>
+                      </div>
+                    )}
+                    <span className="absolute top-1 right-1 bg-primary text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">عرض خاص</span>
+                  </div>
+
+                  {/* محتوى العرض */}
+                  <div className="flex-1 p-3 flex flex-col justify-between min-w-0">
+                    <div>
+                      <h3 className="font-bold text-gray-900 text-sm leading-snug line-clamp-1">{offer.title}</h3>
+                      {offer.description && (
+                        <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2 leading-relaxed">{offer.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-primary font-black text-sm">{parseFloat(offer.bundlePrice).toFixed(0)} ر.ي</span>
+                      {qty > 0 ? (
+                        <div className="flex items-center gap-1.5 bg-primary/10 rounded-full px-2 py-1">
+                          <button
+                            onClick={() => removeItem(bundleItemId)}
+                            className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white active:scale-95 transition"
+                          >
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <span className="text-primary font-black text-sm w-4 text-center">{qty}</span>
+                          <button
+                            onClick={() => {
+                              const virtualItem: any = {
+                                id: bundleItemId,
+                                name: offer.title,
+                                description: offer.description,
+                                price: String(offer.bundlePrice),
+                                image: offer.image || '',
+                                category: 'العروض',
+                                restaurantId: id || '',
+                                isAvailable: true,
+                                isSpecialOffer: true,
+                              };
+                              addItem(virtualItem, id || '', restaurant.name);
+                            }}
+                            className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white active:scale-95 transition"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (!orderStatus.canOrder) {
+                              setStoreClosedMsg(orderStatus.message || 'عذراً، المتجر مغلق حالياً');
+                              setShowStoreClosed(true);
+                              return;
+                            }
+                            const virtualItem: any = {
+                              id: bundleItemId,
+                              name: offer.title,
+                              description: offer.description,
+                              price: String(offer.bundlePrice),
+                              image: offer.image || '',
+                              category: 'العروض',
+                              restaurantId: id || '',
+                              isAvailable: true,
+                              isSpecialOffer: true,
+                            };
+                            addItem(virtualItem, id || '', restaurant.name);
+                          }}
+                          className="flex items-center gap-1 bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-sm active:scale-95 transition"
+                        >
+                          <Plus className="h-3 w-3" />
+                          أضف للسلة
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── Menu Items ── */}
       <div className="px-3 pt-3 space-y-3">
-        {filteredItems.length === 0 ? (
+        {filteredItems.length === 0 && bundleOffers.length === 0 ? (
           <div className="text-center py-16">
             <UtensilsCrossed className="h-14 w-14 text-gray-200 mx-auto mb-3" />
             <p className="text-gray-400 font-bold text-sm">لا توجد عناصر في هذا القسم</p>
@@ -399,7 +510,7 @@ export default function RestaurantPage() {
               <p className="text-gray-300 text-xs mt-1">لم يتم إضافة أصناف بعد</p>
             )}
           </div>
-        ) : (
+        ) : filteredItems.length === 0 ? null : (
           filteredItems.map(item => {
             const qty = getItemQuantity(item.id);
             const isMealFav = mealFavs.has(item.id);

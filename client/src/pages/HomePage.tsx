@@ -256,10 +256,9 @@ export default function HomePage() {
                   <button
                     className="bg-white text-primary text-[11px] font-black px-4 py-1.5 rounded-full flex items-center gap-1 shadow"
                     onClick={() => {
-                      // الأولوية للمتجر المرتبط (الانتقال إلى صفحة المتجر مباشرةً)
+                      // الأولوية دائماً للمتجر المرتبط بالعرض
                       if (currentOffer.restaurantId) {
-                        const hash = currentOffer.menuItemId ? `#product-${currentOffer.menuItemId}` : '';
-                        setLocation(`/restaurant/${currentOffer.restaurantId}${hash}`);
+                        setLocation(`/restaurant/${currentOffer.restaurantId}`);
                       } else if (currentOffer.menuItemId) {
                         setLocation(`/category/العروض#product-${currentOffer.menuItemId}`);
                       } else {

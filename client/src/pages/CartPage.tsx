@@ -45,6 +45,51 @@ export default function CartPage() {
     enabled: !!restaurantId,
   });
 
+  // جلب عروض الخصم النشطة لهذا المتجر (discount type فقط)
+  const { data: restaurantDiscountOffers = [] } = useQuery<any[]>({
+    queryKey: ['/api/special-offers/discount', restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return [];
+      const res = await fetch(`/api/special-offers?restaurantId=${restaurantId}&offerType=discount`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.filter((o: any) => o.offerType === 'discount' && o.isActive);
+    },
+    enabled: !!restaurantId,
+  });
+
+  // حساب الخصم التلقائي من العروض المرتبطة بالمتجر
+  const appliedOfferDiscount = (() => {
+    if (!restaurantDiscountOffers.length || subtotal === 0) return { amount: 0, offer: null };
+    // اختر أفضل عرض خصم متاح (الأعلى خصماً)
+    let bestDiscount = 0;
+    let bestOffer: any = null;
+    for (const offer of restaurantDiscountOffers) {
+      const minOrder = parseFloat(offer.minimumOrder || '0');
+      if (subtotal < minOrder) continue;
+      // حساب الخصم بناءً على النطاق
+      let discountBase = subtotal;
+      if (offer.discountScope === 'section' && offer.sectionId) {
+        // خصم على عناصر القسم المحدد فقط — نحسب المجموع الفرعي لهذه العناصر
+        discountBase = items
+          .filter((item: any) => item.sectionId === offer.sectionId)
+          .reduce((sum: number, item: any) => sum + parseFloat(item.price) * item.quantity, 0);
+        if (discountBase === 0) continue; // لا توجد عناصر من هذا القسم
+      }
+      let discount = 0;
+      if (offer.discountPercent) {
+        discount = (discountBase * parseFloat(offer.discountPercent)) / 100;
+      } else if (offer.discountAmount) {
+        discount = Math.min(parseFloat(offer.discountAmount), discountBase);
+      }
+      if (discount > bestDiscount) {
+        bestDiscount = discount;
+        bestOffer = offer;
+      }
+    }
+    return { amount: Math.round(bestDiscount * 100) / 100, offer: bestOffer };
+  })();
+
   const { data: uiSettings } = useQuery<any[]>({
     queryKey: ['/api/ui-settings'],
   });
@@ -211,7 +256,8 @@ export default function CartPage() {
     setCouponError('');
   };
 
-  const finalTotal = Math.max(0, total - couponDiscount);
+  const totalDiscountAmount = couponDiscount + appliedOfferDiscount.amount;
+  const finalTotal = Math.max(0, total - totalDiscountAmount);
 
   const [orderForm, setOrderForm] = useState({
     customerName: '',
@@ -307,7 +353,7 @@ export default function CartPage() {
       return;
     }
 
-    const orderData: InsertOrder & { customerId?: string } = {
+    const orderData: any = {
       orderNumber: `ORD${Date.now()}`,
       customerName: orderForm.customerName,
       // استخدم رقم هاتف الحساب المسجّل عند توفره لضمان تطابق المُعرّف مع الإشعارات والتتبع
@@ -331,6 +377,9 @@ export default function CartPage() {
         ? parseFloat(userLocation.position.coords.longitude.toFixed(8)).toString()
         : undefined,
       status: 'pending',
+      // خصم العرض التلقائي
+      appliedOfferId: appliedOfferDiscount.offer?.id || undefined,
+      offerDiscountAmount: appliedOfferDiscount.amount > 0 ? appliedOfferDiscount.amount.toString() : undefined,
     };
 
     // حفظ رقم الهاتف لاسترجاع الطلبات لاحقاً (للزوار وللعملاء معاً)
@@ -500,6 +549,23 @@ export default function CartPage() {
                 </div>
               )}
 
+              {/* خصم العرض التلقائي */}
+              {appliedOfferDiscount.amount > 0 && appliedOfferDiscount.offer && (
+                <div className="flex items-center justify-between bg-orange-50 border border-orange-200 rounded-lg p-2.5 my-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🎁</span>
+                    <div>
+                      <p className="text-sm font-semibold text-orange-700">{appliedOfferDiscount.offer.title}</p>
+                      <p className="text-xs text-orange-600">
+                        خصم تلقائي {appliedOfferDiscount.offer.discountPercent ? `${appliedOfferDiscount.offer.discountPercent}%` : `${formatCurrency(appliedOfferDiscount.offer.discountAmount)}`}
+                        {appliedOfferDiscount.offer.discountScope === 'section' ? ' على القسم المحدد' : ' على كامل الطلب'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-orange-700 font-bold text-sm">- {formatCurrency(appliedOfferDiscount.amount)}</span>
+                </div>
+              )}
+
               <div className="flex justify-between font-bold border-t pt-2 mt-2">
                 <span className="text-foreground">الإجمالي</span>
                 <span className="text-orange-500 text-lg" data-testid="order-total">{formatCurrency(finalTotal)}</span>
@@ -654,11 +720,11 @@ export default function CartPage() {
 
       {showScheduledDialog && scheduledData && (
         <ScheduledOrderDialog
-          isOpen={showScheduledDialog}
+          open={showScheduledDialog}
           onClose={() => setShowScheduledDialog(false)}
-          onConfirm={(data) => {
+          onConfirm={(data: any) => {
             // تنفيذ الطلب المجدول
-            const orderData: InsertOrder = {
+            const orderData: any = {
               orderNumber: `ORD${Date.now()}`,
               customerName: orderForm.customerName,
               customerPhone: orderForm.customerPhone,
@@ -680,6 +746,8 @@ export default function CartPage() {
                 : undefined,
               status: 'scheduled',
               deliveryPreference: 'scheduled',
+              appliedOfferId: appliedOfferDiscount.offer?.id || undefined,
+              offerDiscountAmount: appliedOfferDiscount.amount > 0 ? appliedOfferDiscount.amount.toString() : undefined,
               scheduledDate: data.date,
               scheduledTimeSlot: data.timeSlot || data.time,
               isScheduled: true,
