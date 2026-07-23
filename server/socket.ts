@@ -51,34 +51,43 @@ export function setupWebSockets(server: Server) {
     });
 
     ws.on("close", () => {
+      // جمع كل إدخالات هذا الاتصال (قد يكون مسجَّلاً بأكثر من مفتاح: customerId + phone)
+      const toDelete: string[] = [];
+      const keysToClean = new Set<string>();
+      let closedOrderId: string | undefined;
+
       for (const [id, connection] of clients.entries()) {
         if (connection.ws === ws) {
-          const connectionKey = connection.connectionKey;
-          const orderId = connection.orderId;
-          
-          clients.delete(id);
-          
-          const connections = userConnections.get(connectionKey) || [];
-          const index = connections.indexOf(ws);
-          if (index > -1) {
-            connections.splice(index, 1);
-          }
-          
-          if (connections.length === 0) {
-            userConnections.delete(connectionKey);
-          }
+          toDelete.push(id);
+          keysToClean.add(connection.connectionKey);
+          if (connection.orderId) closedOrderId = connection.orderId;
+        }
+      }
 
-          if (orderId) {
-            const trackers = orderTrackers.get(orderId) || [];
-            const tIndex = trackers.indexOf(ws);
-            if (tIndex > -1) {
-              trackers.splice(tIndex, 1);
-            }
-            if (trackers.length === 0) {
-              orderTrackers.delete(orderId);
-            }
-          }
-          break;
+      // حذف من خريطة clients
+      for (const id of toDelete) {
+        clients.delete(id);
+      }
+
+      // تنظيف userConnections لكل مفتاح مرتبط بهذا الاتصال
+      for (const key of keysToClean) {
+        const connections = userConnections.get(key) || [];
+        const filtered = connections.filter(c => c !== ws);
+        if (filtered.length === 0) {
+          userConnections.delete(key);
+        } else {
+          userConnections.set(key, filtered);
+        }
+      }
+
+      // تنظيف orderTrackers إن وجد
+      if (closedOrderId) {
+        const trackers = orderTrackers.get(closedOrderId) || [];
+        const filtered = trackers.filter(c => c !== ws);
+        if (filtered.length === 0) {
+          orderTrackers.delete(closedOrderId);
+        } else {
+          orderTrackers.set(closedOrderId, filtered);
         }
       }
     });

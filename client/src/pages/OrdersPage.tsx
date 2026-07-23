@@ -81,11 +81,19 @@ export default function OrdersPage() {
     queryKey: ['orders', customerPhone, customerId],
     enabled: !!(customerPhone || customerId),
     queryFn: async () => {
-      // تمرير معرّف الحساب أيضاً لضمان جلب طلبات العميل حتى لو اختلف الهاتف المُدخل
-      const cidParam = customerId ? `?customerId=${encodeURIComponent(customerId)}` : '';
-      const phoneParam = encodeURIComponent(customerPhone || '');
+      // بناء معاملات الاستعلام بشكل آمن حتى لو كان رقم الهاتف فارغاً
+      const params = new URLSearchParams();
+      if (customerId) params.set('customerId', customerId);
+      const queryStr = params.toString() ? `?${params.toString()}` : '';
+
+      // إذا كان رقم الهاتف فارغاً نستخدم معرّف الحساب مباشرةً كمسار بديل
+      // لضمان تطابق نمط المسار /customer/:phone في Express
+      const phoneSegment = customerPhone
+        ? encodeURIComponent(customerPhone)
+        : (customerId ? `id:${encodeURIComponent(customerId)}` : '');
+
       const [ordersRes, wasalniRes] = await Promise.all([
-        fetch(`/api/orders/customer/${phoneParam}${cidParam}`),
+        fetch(`/api/orders/customer/${phoneSegment}${queryStr}`),
         fetch(`/api/wasalni?phone=${encodeURIComponent(customerPhone || '')}`),
       ]);
       if (!ordersRes.ok) {
@@ -199,7 +207,8 @@ export default function OrdersPage() {
               message.type === 'new_wasalni_request' ||
               message.type === 'driver_assigned'
             ) {
-              queryClient.invalidateQueries({ queryKey: ['orders', customerPhone] });
+              // استخدام المفتاح الكامل لضمان إلغاء الكاش الصحيح
+              queryClient.invalidateQueries({ queryKey: ['orders', customerPhone, customerId] });
             }
           } catch (err) {
             console.error('Failed to parse WS message in OrdersPage:', err);

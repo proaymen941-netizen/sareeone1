@@ -76,6 +76,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (response.ok) {
         const userData = await response.json();
+        // حفظ رقم الهاتف في localStorage لاستخدامه في صفحة الطلبات والإشعارات
+        if (userData.user?.phone) {
+          localStorage.setItem('customer_phone', userData.user.phone);
+        }
         setAuthState({
           isAuthenticated: true,
           user: userData.user,
@@ -93,6 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearAuthState = () => {
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('customer_phone');
     setAuthState({
       isAuthenticated: false,
       user: null,
@@ -132,6 +137,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (response.ok && result.success) {
         localStorage.setItem('auth_token', result.token);
+        // حفظ رقم الهاتف لاستخدامه في جلب الطلبات والإشعارات
+        if (result.user?.phone) {
+          localStorage.setItem('customer_phone', result.user.phone);
+        }
         setAuthState({
           isAuthenticated: true,
           user: result.user,
@@ -166,6 +175,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (response.ok && result.success) {
         localStorage.setItem('auth_token', result.token);
+        // حفظ رقم الهاتف لاستخدامه في جلب الطلبات والإشعارات
+        if (result.user?.phone) {
+          localStorage.setItem('customer_phone', result.user.phone);
+        }
         setAuthState({
           isAuthenticated: true,
           user: result.user,

@@ -677,8 +677,15 @@ router.put("/:id", async (req, res) => {
 // جلب الطلبات حسب العميل
 router.get("/customer/:phone", async (req, res) => {
   try {
-    const phone = (req.params.phone || '').trim().replace(/\s+/g, '');
-    const customerId = (req.query.customerId as string) || undefined;
+    let phone = (req.params.phone || '').trim().replace(/\s+/g, '');
+    let customerId = (req.query.customerId as string) || undefined;
+
+    // دعم الحالة التي يُرسَل فيها معرّف الحساب فقط كمسار بديل (id:uuid)
+    if (phone.startsWith('id:')) {
+      const embeddedId = phone.slice(3);
+      if (!customerId && embeddedId) customerId = embeddedId;
+      phone = '';
+    }
 
     if (!phone && !customerId) {
       return res.status(400).json({
