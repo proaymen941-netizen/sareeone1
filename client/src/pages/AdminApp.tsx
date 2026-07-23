@@ -22,6 +22,7 @@ import RestaurantStatementPage from "./admin/RestaurantStatementPage";
 import AdminFlutterNotifications from "./admin/AdminFlutterNotifications";
 import AdminWasalniRequests from "./admin/AdminWasalniRequests";
 import AdminDriverTracking from "./admin/AdminDriverTracking";
+import AdminInvoiceDesign from "./admin/AdminInvoiceDesign";
 import AdminBusinessHours from "./AdminBusinessHours";
 import AdminSpecialOffers from "./AdminSpecialOffers";
 import AdminSettings from "./AdminSettings";
@@ -70,6 +71,7 @@ export const AdminApp: React.FC<AdminAppProps> = () => {
         <Route path="/admin/business-hours" component={AdminBusinessHours} />
         <Route path="/admin/notifications" component={AdminFlutterNotifications} />
         <Route path="/admin/wasalni" component={AdminWasalniRequests} />
+        <Route path="/admin/invoice-design" component={AdminInvoiceDesign} />
         <Route component={NotFound} />
       </Switch>
       </AdminErrorBoundary>

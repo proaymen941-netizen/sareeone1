@@ -1,6 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useLocation } from 'wouter';
+
+// مساعد لجلب إعداد التصميم من ui_settings
+function getInvoiceSetting(settings: any[] | undefined, key: string, fallback = '') {
+  return settings?.find((s: any) => s.key === key)?.value || fallback;
+}
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -39,7 +44,20 @@ export default function RestaurantStatementPage() {
     enabled: !!restaurantId
   });
 
+  // إعدادات تصميم المستندات المُحمَّلة من لوحة التحكم
+  const { data: uiSettings } = useQuery<any[]>({ queryKey: ['/api/ui-settings'] });
+  const iSet = (key: string, fb = '') => getInvoiceSetting(uiSettings, key, fb);
+
   const handlePrint = () => window.print();
+
+  // تحويل اللون الهيكساديسيمال إلى RGB لـ jsPDF
+  const hexToRgb = (hex: string): [number, number, number] => {
+    const clean = hex.replace('#', '');
+    const r = parseInt(clean.substring(0, 2), 16);
+    const g = parseInt(clean.substring(2, 4), 16);
+    const b = parseInt(clean.substring(4, 6), 16);
+    return [isNaN(r) ? 59 : r, isNaN(g) ? 130 : g, isNaN(b) ? 246 : b];
+  };
 
   const handleDownloadPDF = async () => {
     const { default: jsPDF } = await import('jspdf');
@@ -51,70 +69,158 @@ export default function RestaurantStatementPage() {
     const r = statement?.restaurant;
     const s = statement?.summary;
 
-    doc.setFontSize(18);
-    doc.text('Statement / كشف حساب', 105, 20, { align: 'center' });
+    // تصميم من إعدادات لوحة التحكم
+    const companyName = iSet('invoice_company_name', 'السريع ون');
+    const headerText = iSet('invoice_header_text', 'كشف حساب - Store Statement');
+    const companyAddress = iSet('invoice_company_address', '');
+    const companyPhone = iSet('invoice_company_phone', '');
+    const bankName = iSet('invoice_bank_name', '');
+    const bankAccount = iSet('invoice_bank_account', '');
+    const bankIban = iSet('invoice_bank_iban', '');
+    const footerText = iSet('invoice_footer_text', 'شكراً لتعاملكم معنا');
+    const stampText = iSet('invoice_stamp_text', 'ختم وتوقيع معتمد');
+    const signatureText = iSet('invoice_signature_text', 'توقيع المدير المختص');
+    const termsText = iSet('invoice_terms_text', '');
+    const currency = iSet('invoice_currency', 'ريال يمني');
+    const primaryColorHex = iSet('invoice_primary_color', '#3b82f6');
+    const primaryRgb = hexToRgb(primaryColorHex);
 
-    doc.setFontSize(11);
-    doc.text(`Store: ${r?.name || ''}`, 14, 35);
-    doc.text(`Phone: ${r?.phone || '-'}`, 14, 42);
-    doc.text(`Commission Rate: ${r?.commissionRate || 0}%`, 14, 49);
-    doc.text(`Period: ${appliedFrom} to ${appliedTo}`, 14, 56);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 63);
+    // --- رأس المستند ---
+    doc.setFillColor(...primaryRgb);
+    doc.rect(0, 0, 210, 30, 'F');
 
-    doc.setFillColor(240, 245, 255);
-    doc.rect(14, 70, 90, 40, 'F');
-    doc.rect(110, 70, 90, 40, 'F');
-
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.text(companyName, 196, 12, { align: 'right' });
     doc.setFontSize(10);
-    doc.text('Orders Summary', 59, 77, { align: 'center' });
-    doc.text(`Delivered: ${s?.deliveredOrders || 0}`, 20, 85);
-    doc.text(`Cancelled: ${s?.cancelledOrders || 0}`, 20, 92);
-    doc.text(`Total Subtotal: ${fmtNum(s?.totalSubtotal || 0)} YER`, 20, 99);
+    doc.text(headerText, 196, 20, { align: 'right' });
+    if (companyAddress) doc.text(companyAddress, 14, 12);
+    if (companyPhone) doc.text(companyPhone, 14, 20);
 
-    doc.text('Financial Summary', 155, 77, { align: 'center' });
-    doc.text(`Total Commission: ${fmtNum(s?.totalCommission || 0)} YER`, 116, 85);
-    doc.text(`Net Earnings: ${fmtNum(s?.totalNet || 0)} YER`, 116, 92);
-    doc.text(`Current Balance: ${fmtNum(s?.currentBalance || 0)} YER`, 116, 99);
-    doc.text(`Withdrawn: ${fmtNum(s?.totalWithdrawn || 0)} YER`, 116, 106);
+    doc.setTextColor(0, 0, 0);
 
+    // --- بيانات المتجر ---
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Store / المتجر:', 14, 42);
+    doc.setFont('helvetica', 'normal');
+    doc.text(r?.name || '', 50, 42);
+
+    doc.text('Phone / هاتف:', 14, 49);
+    doc.text(r?.phone || '-', 50, 49);
+
+    doc.text('Commission Rate / العمولة:', 14, 56);
+    doc.text(`${r?.commissionRate || 0}%`, 70, 56);
+
+    doc.text('Period / الفترة:', 110, 42);
+    doc.text(`${appliedFrom} - ${appliedTo}`, 140, 42);
+
+    doc.text('Generated / تاريخ الإصدار:', 110, 49);
+    doc.text(new Date().toLocaleDateString('ar-YE'), 160, 49);
+
+    // --- ملخص مالي ---
+    doc.setFillColor(primaryRgb[0], primaryRgb[1], primaryRgb[2], 0.08);
+    const boxY = 64;
+    doc.setFillColor(240, 245, 255);
+    doc.rect(14, boxY, 88, 38, 'F');
+    doc.rect(108, boxY, 88, 38, 'F');
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('ملخص الطلبات / Orders Summary', 58, boxY + 7, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Delivered: ${s?.deliveredOrders || 0}`, 18, boxY + 14);
+    doc.text(`Cancelled: ${s?.cancelledOrders || 0}`, 18, boxY + 21);
+    doc.text(`Total: ${fmtNum(s?.totalSubtotal || 0)} ${currency}`, 18, boxY + 28);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('ملخص مالي / Financial Summary', 152, boxY + 7, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Commission: ${fmtNum(s?.totalCommission || 0)} ${currency}`, 112, boxY + 14);
+    doc.text(`Net Earnings: ${fmtNum(s?.totalNet || 0)} ${currency}`, 112, boxY + 21);
+    doc.text(`Balance: ${fmtNum(s?.currentBalance || 0)} ${currency}`, 112, boxY + 28);
+    doc.text(`Withdrawn: ${fmtNum(s?.totalWithdrawn || 0)} ${currency}`, 112, boxY + 35);
+
+    // --- جدول الطلبات ---
     const orderRows = (statement?.orders || []).map((o: any, i: number) => [
       i + 1,
       o.orderNumber,
       fmtDate(o.date),
       o.customerName,
-      fmtNum(o.subtotal),
+      `${fmtNum(o.subtotal)} ${currency}`,
       `${o.commissionRate}%`,
-      fmtNum(o.commissionAmount),
-      fmtNum(o.restaurantNet),
+      `${fmtNum(o.commissionAmount)} ${currency}`,
+      `${fmtNum(o.restaurantNet)} ${currency}`,
     ]);
 
     autoTable(doc, {
-      startY: 115,
+      startY: boxY + 44,
       head: [['#', 'Order#', 'Date', 'Customer', 'Subtotal', 'Comm%', 'Commission', 'Net']],
       body: orderRows,
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+      styles: { fontSize: 7.5, cellPadding: 2 },
+      headStyles: { fillColor: primaryRgb, textColor: 255 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
     });
 
+    let nextY = (doc as any).lastAutoTable?.finalY + 8;
+
+    // --- جدول السحوبات ---
     if ((statement?.withdrawals || []).length > 0) {
       const wRows = statement.withdrawals.map((w: any, i: number) => [
         i + 1,
         fmtDate(w.date),
-        fmtNum(w.amount),
-        w.status === 'completed' ? 'Completed' : w.status === 'pending' ? 'Pending' : w.status,
+        `${fmtNum(w.amount)} ${currency}`,
+        w.status === 'completed' ? 'مكتمل' : w.status === 'pending' ? 'معلّق' : w.status,
         w.bankName || '-',
         w.accountNumber || '-'
       ]);
-
       autoTable(doc, {
-        startY: (doc as any).lastAutoTable?.finalY + 10,
+        startY: nextY,
         head: [['#', 'Date', 'Amount', 'Status', 'Bank', 'Account#']],
         body: wRows,
-        styles: { fontSize: 8, cellPadding: 2 },
+        styles: { fontSize: 7.5, cellPadding: 2 },
         headStyles: { fillColor: [16, 185, 129], textColor: 255 },
       });
+      nextY = (doc as any).lastAutoTable?.finalY + 8;
     }
+
+    // --- معلومات البنك ---
+    if (bankName) {
+      doc.setFillColor(235, 245, 255);
+      doc.rect(14, nextY, 182, bankIban ? 18 : 12, 'F');
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('معلومات التحويل البنكي / Banking Info', 105, nextY + 5, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Bank: ${bankName}   Account: ${bankAccount}${bankIban ? `   IBAN: ${bankIban}` : ''}`, 105, nextY + 11, { align: 'center' });
+      nextY += bankIban ? 24 : 18;
+    }
+
+    // --- الشروط ---
+    if (termsText) {
+      doc.setFontSize(7.5);
+      doc.setTextColor(120, 120, 120);
+      doc.text(termsText, 105, nextY + 5, { align: 'center', maxWidth: 180 });
+      doc.setTextColor(0, 0, 0);
+      nextY += 12;
+    }
+
+    // --- الختم والتوقيع ---
+    const signY = Math.min(nextY + 10, 255);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.rect(14, signY, 40, 15);
+    doc.text(stampText, 34, signY + 9, { align: 'center' });
+    doc.line(155, signY + 12, 196, signY + 12);
+    doc.text(signatureText, 175, signY + 16, { align: 'center' });
+
+    // --- تذييل ---
+    const pageHeight = doc.internal.pageSize.height;
+    doc.setFillColor(...primaryRgb);
+    doc.rect(0, pageHeight - 12, 210, 12, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(8);
+    doc.text(footerText, 105, pageHeight - 4, { align: 'center' });
 
     doc.save(`statement-${r?.name || restaurantId}-${appliedFrom}-${appliedTo}.pdf`);
   };

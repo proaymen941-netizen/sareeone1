@@ -45,6 +45,7 @@ import {
   Layers,
   Activity,
   Bike,
+  FileText,
 } from 'lucide-react';
 import type { UiSettings } from '@shared/schema';
 
@@ -490,6 +491,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       label: 'الإعدادات',
       items: [
         { icon: Smartphone, label: 'إدارة الواجهات والإعدادات', path: '/admin/ui-settings', permission: 'manage_settings' },
+        { icon: FileText, label: 'تصميم المستندات والسندات', path: '/admin/invoice-design', permission: 'manage_settings' },
         { icon: Database, label: 'النسخ الاحتياطي', path: '/admin/backup', permission: 'manage_settings' },
         { icon: User, label: 'الملف الشخصي', path: '/admin/profile', permission: null },
       ].filter(item => hasPermission(item.permission))

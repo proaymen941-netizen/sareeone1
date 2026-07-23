@@ -7,7 +7,8 @@ import {
   Briefcase as BriefcaseIcon, FileText as FileTextIcon,
   Phone as PhoneIcon, Mail as MailIcon, MapPin as MapPinIcon,
   Shield, Key, Lock, EyeOff,
-  Truck, TrendingUp, DollarSign, Link, BarChart3, ArrowLeft
+  Truck, TrendingUp, DollarSign, Link, BarChart3, ArrowLeft,
+  Download, Printer
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -800,69 +801,7 @@ export default function AdminHRManagement() {
             </div>
 
             {/* جدول رواتب الموظفين */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>مسير رواتب الموظفين</CardTitle>
-                    <CardDescription>رواتب الشهر الحالي للموظفين المسجلين في النظام</CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <BanknoteIcon className="w-4 h-4" />
-                    تصدير كشف الرواتب
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {!employees || employees.length === 0 ? (
-                  <div className="text-center py-10 text-muted-foreground">
-                    <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                    <p>لا يوجد موظفون مسجلون بعد</p>
-                    <p className="text-sm mt-1">أضف موظفين من تبويب "الموظفين" لعرض مسير الرواتب</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>الموظف</TableHead>
-                        <TableHead>القسم</TableHead>
-                        <TableHead>المنصب</TableHead>
-                        <TableHead>الراتب الأساسي</TableHead>
-                        <TableHead>بدل الحضور</TableHead>
-                        <TableHead>الإجمالي</TableHead>
-                        <TableHead>الحالة</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(employees || []).filter(e => e.status === 'active').map((emp) => {
-                        const attendanceBonus = emp.attendanceRate >= 95 ? (emp.salary * 0.1) : 0;
-                        const total = emp.salary + attendanceBonus;
-                        return (
-                          <TableRow key={emp.id}>
-                            <TableCell>
-                              <div>
-                                <p className="font-medium">{emp.name}</p>
-                                <p className="text-xs text-muted-foreground">{emp.phone}</p>
-                              </div>
-                            </TableCell>
-                            <TableCell>{emp.department}</TableCell>
-                            <TableCell>{emp.position}</TableCell>
-                            <TableCell className="font-medium">{formatCurrency(emp.salary)}</TableCell>
-                            <TableCell className="text-green-600">
-                              {attendanceBonus > 0 ? `+${formatCurrency(attendanceBonus)}` : '-'}
-                            </TableCell>
-                            <TableCell className="font-bold text-blue-600">{formatCurrency(total)}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="bg-green-50 text-green-700">مكتمل</Badge>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
+            <PayrollTable employees={employees} uiSettings={uiSettings} />
 
             {/* ربط مع الأقسام الأخرى */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

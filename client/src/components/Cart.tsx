@@ -108,7 +108,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
   const showCashPayment = getSetting('show_cash_payment', 'true') !== 'false';
   const showPaymentCards = getSetting('show_payment_cards', 'true') !== 'false';
   const showBankTransfer = getSetting('show_bank_transfer', 'false') === 'true';
-  const scheduledOrdersEnabled = getSetting('enable_scheduled_orders', 'true') !== 'false';
+  const scheduledOrdersEnabled = getSetting('enable_scheduled_orders', 'false') === 'true';
   const showCouponBoxAlways = getSetting('show_coupon_box_always', 'true') !== 'false';
   const couponMinOrderValue = parseFloat(getSetting('coupon_min_order_value', '0') || '0');
   const showCouponBox = showCouponBoxAlways || (couponMinOrderValue > 0 && state.subtotal >= couponMinOrderValue);

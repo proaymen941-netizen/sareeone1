@@ -461,11 +461,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { key } = req.params;
       const { value } = req.body;
       
-      if (!value) {
+      if (value === undefined || value === null) {
         return res.status(400).json({ message: "قيمة الإعداد مطلوبة" });
       }
 
-      const updated = await storage.updateUiSetting(key, value);
+      const updated = await storage.updateUiSetting(key, String(value));
       if (!updated) {
         return res.status(404).json({ message: "الإعداد غير موجود" });
       }

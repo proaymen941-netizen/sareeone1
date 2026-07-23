@@ -18,7 +18,7 @@ export default function AppClosedOverlay({
   message,
   onScheduleOrder,
   onClose,
-  scheduledOrdersEnabled = true,
+  scheduledOrdersEnabled = false,
 }: AppClosedOverlayProps) {
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [scheduledDate, setScheduledDate] = useState(new Date().toISOString().split('T')[0]);

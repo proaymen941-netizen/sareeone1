@@ -116,6 +116,9 @@ export default function CartPage() {
   const canPlaceOrder = appStatus.isOpen && (restaurantStatus === null || restaurantStatus.isOpen);
 
   // إعدادات السلة من لوحة التحكم
+  // خدمة تأجيل الطلبات - تعمل فقط إذا فعّلها المدير من لوحة التحكم
+  const scheduledOrdersEnabled = getSetting('enable_scheduled_orders', 'false') === 'true';
+
   const showCouponBoxAlways = getSetting('show_coupon_box_always', 'true') !== 'false';
   const couponMinOrderValue = parseFloat(getSetting('coupon_min_order_value', '0') || '0');
   const showCouponBox = showCouponBoxAlways || (couponMinOrderValue > 0 && subtotal >= couponMinOrderValue);
@@ -709,12 +712,13 @@ export default function CartPage() {
           openingTime={getSetting('opening_time', '08:00')}
           closingTime={getSetting('closing_time', '23:00')}
           message={appClosedMessage}
+          scheduledOrdersEnabled={scheduledOrdersEnabled}
           onClose={() => setShowAppClosedOverlay(false)}
-          onScheduleOrder={(date, time) => {
+          onScheduleOrder={scheduledOrdersEnabled ? (date, time) => {
             setScheduledData({ date, time });
             setShowAppClosedOverlay(false);
             setShowScheduledDialog(true);
-          }}
+          } : undefined}
         />
       )}
 
